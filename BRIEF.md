@@ -26,7 +26,7 @@ Relationships (all many-to-many unless noted):
 
 ## 3. Data model
 
-Use Prisma with PostgreSQL. Fields below are the minimum; add ids, timestamps, and foreign keys as needed.
+Use Drizzle ORM with PostgreSQL (see `src/db/schema.ts`). Fields below are the minimum; add ids, timestamps, and foreign keys as needed.
 
 **Assumption**
 - statement (text)
@@ -142,7 +142,7 @@ No user accounts in v1. Two passwords set by environment variable: `OWNER_PASSWO
 ## 9. Stack
 
 - Next.js (App Router) + TypeScript + Tailwind
-- Prisma + PostgreSQL. Local development uses a local Postgres. Production uses Supabase Postgres (connection strings via env vars `DATABASE_URL` and `DIRECT_URL`).
+- Drizzle ORM + PostgreSQL (Prisma was dropped because its engine binaries cannot be downloaded in the build workspace). Local development uses a local Postgres. Production uses Supabase Postgres (connection strings via env vars `DATABASE_URL` and `DIRECT_URL`).
 - Drag and drop: dnd-kit
 - Charts (assumption map only): plain SVG or a small library
 - Deploy target: Vercel. Do not deploy until told to.
