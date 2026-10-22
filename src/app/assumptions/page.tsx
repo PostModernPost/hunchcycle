@@ -38,7 +38,7 @@ export default async function AssumptionsPage() {
                 {a.experiments.map(({ experiment: e }, i) => (
                   <span key={e.id}>
                     {i > 0 && ", "}
-                    <Link href={`/experiments/${e.id}`} className="hover:underline">
+                    <Link href={`/sprints/${e.id}`} className="hover:underline">
                       {experimentName(e)}
                     </Link>
                   </span>

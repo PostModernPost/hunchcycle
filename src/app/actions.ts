@@ -10,7 +10,7 @@ type Result = { ok: true; id?: string } | { ok: false; error: string };
 
 const done = (id?: string): Result => {
   revalidatePath("/");
-  revalidatePath("/experiments/[id]", "page");
+  revalidatePath("/sprints/[id]", "page");
   return { ok: true, id };
 };
 
@@ -52,7 +52,7 @@ export async function createType(name: string, needsScript: boolean): Promise<Re
 /** Changing the type gives the experiment the next number in its new type. */
 export async function changeType(id: string, typeId: string): Promise<Result> {
   const [e] = await db.select().from(s.experiments).where(eq(s.experiments.id, id));
-  if (!e) return { ok: false, error: "Experiment not found." };
+  if (!e) return { ok: false, error: "Sprint not found." };
   if (!typeId || e.typeId === typeId) return { ok: true };
   await db
     .update(s.experiments)
@@ -65,7 +65,7 @@ export async function moveCard(id: string, to: Stage): Promise<Result> {
   if (to === "closed") return closeCard(id);
   if (to === "metrics") to = "experiment";
   const card = await loadCard(id);
-  if (!card) return { ok: false, error: "Card not found." };
+  if (!card) return { ok: false, error: "Sprint not found." };
   const check = checkMove(toGateCard(card), to);
   if (!check.ok) return { ok: false, error: blockedMessage(check) };
   await db.update(s.experiments).set({ stage: to, closedAt: null, updatedAt: new Date() }).where(eq(s.experiments.id, id));
@@ -74,7 +74,7 @@ export async function moveCard(id: string, to: Stage): Promise<Result> {
 
 export async function closeCard(id: string): Promise<Result> {
   const card = await loadCard(id);
-  if (!card) return { ok: false, error: "Card not found." };
+  if (!card) return { ok: false, error: "Sprint not found." };
   const check = checkMove(toGateCard(card), "closed");
   if (!check.ok) return { ok: false, error: blockedMessage(check) };
   await db.update(s.experiments).set({ stage: "closed", closedAt: new Date(), updatedAt: new Date() }).where(eq(s.experiments.id, id));
@@ -109,8 +109,8 @@ export async function updateCard(id: string, field: string, value: unknown): Pro
 /** Split from Hypothesis: a sibling card with the same assumptions and hypothesis. */
 export async function splitCard(id: string): Promise<Result> {
   const card = await loadCard(id);
-  if (!card) return { ok: false, error: "Card not found." };
-  if (card.stage !== "hypothesis") return { ok: false, error: "Cards can only be split from the Hypothesis column." };
+  if (!card) return { ok: false, error: "Sprint not found." };
+  if (card.stage !== "hypothesis") return { ok: false, error: "Sprints can only be split from the Hypothesis column." };
   const group = card.siblingGroup ?? crypto.randomUUID();
   if (!card.siblingGroup) await db.update(s.experiments).set({ siblingGroup: group }).where(eq(s.experiments.id, id));
   const [copy] = await db
@@ -136,14 +136,14 @@ export async function splitCard(id: string): Promise<Result> {
 /** Loop back: a closed experiment starts the next cycle of its type in Assumption, with the same assumptions. */
 export async function createNextExperiment(id: string): Promise<Result> {
   const card = await loadCard(id);
-  if (!card) return { ok: false, error: "Experiment not found." };
-  if (card.stage !== "closed") return { ok: false, error: "Close this experiment before starting the next one." };
+  if (!card) return { ok: false, error: "Sprint not found." };
+  if (card.stage !== "closed") return { ok: false, error: "Close this sprint before starting the next one." };
   const [next] = await db
     .insert(s.experiments)
     .values({
       typeId: card.typeId,
       cycleNumber: card.typeId ? await nextCycle(card.typeId) : null,
-      title: card.typeId ? null : `${card.title ?? "Experiment"} (next)`,
+      title: card.typeId ? null : `${card.title ?? "Sprint"} (next)`,
       stage: "assumption",
     })
     .returning();
@@ -155,7 +155,7 @@ export async function createNextExperiment(id: string): Promise<Result> {
 /** Clears the "seeded, review me" tag once Adam has checked an imported experiment. */
 export async function markReviewed(id: string): Promise<Result> {
   const [e] = await db.select().from(s.experiments).where(eq(s.experiments.id, id));
-  if (!e) return { ok: false, error: "Experiment not found." };
+  if (!e) return { ok: false, error: "Sprint not found." };
   await db
     .update(s.experiments)
     .set({ tags: e.tags.filter((t) => t !== "seeded, review me"), updatedAt: new Date() })

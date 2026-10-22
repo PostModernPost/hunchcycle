@@ -80,7 +80,7 @@ export function Drawer({
                 </button>
               </>
             )}
-            <Link href={`/experiments/${card.id}`} className="ml-auto text-xs text-muted hover:text-ink">
+            <Link href={`/sprints/${card.id}`} className="ml-auto text-xs text-muted hover:text-ink">
               Full page
             </Link>
             <button onClick={onClose} className="text-xl leading-none text-muted hover:text-ink" aria-label="Close">
@@ -172,7 +172,7 @@ function GateBox({ card, onOpen }: { card: BoardCard; onOpen: (id: string) => vo
   if (card.stage === "closed") {
     return (
       <div className="mb-4 rounded-lg border border-line bg-white p-3 text-sm">
-        This experiment is closed{card.closedAt ? ` (${fmtDate(card.closedAt)})` : ""}. It stays searchable.
+        This sprint is closed{card.closedAt ? ` (${fmtDate(card.closedAt)})` : ""}. It stays searchable.
         <div className="mt-2 flex flex-wrap gap-2">
           <Button
             kind="primary"
@@ -184,7 +184,7 @@ function GateBox({ card, onOpen }: { card: BoardCard; onOpen: (id: string) => vo
             }
             disabled={pending}
           >
-            Start next cycle
+            Start next sprint
           </Button>
           <Button onClick={() => run(() => A.moveCard(card.id, "decision"))} disabled={pending}>
             Reopen in Decision
@@ -213,7 +213,7 @@ function GateBox({ card, onOpen }: { card: BoardCard; onOpen: (id: string) => vo
       )}
       <div className="mt-2 flex items-center gap-2">
         <Button kind="primary" disabled={pending || !check.ok} onClick={() => run(() => A.moveCard(card.id, next))}>
-          {next === "closed" ? "Close experiment" : `Expand into ${STAGE_LABELS[next]}`}
+          {next === "closed" ? "Close sprint" : `Expand into ${STAGE_LABELS[next]}`}
         </Button>
         {prev && (
           <div className="relative ml-auto">
@@ -357,7 +357,7 @@ function HypothesisSection({ card, save, onOpen }: SectionProps & { onOpen: (id:
       {card.stage === "hypothesis" && (
         <div className="rounded-md bg-stone-50 p-3 text-sm">
           <p className="mb-2 text-muted">
-            Want to test this assumption more than one way at the same time? Split makes a sibling card with the same assumptions and hypothesis.
+            Want to test this assumption more than one way at the same time? Split makes a sibling sprint with the same assumptions and hypothesis.
           </p>
           <Button
             disabled={pending}
@@ -368,7 +368,7 @@ function HypothesisSection({ card, save, onOpen }: SectionProps & { onOpen: (id:
               )
             }
           >
-            Split into a sibling card
+            Split into a sibling sprint
           </Button>
         </div>
       )}
@@ -748,7 +748,7 @@ function AssumptionUpdate({ card, assumption: a }: { card: BoardCard; assumption
       </div>
       {entries.map((h) => (
         <div key={h.id} className="mt-1 text-xs text-green-800">
-          Updated by this experiment: evidence {h.fromEvidence} to {h.toEvidence}, {h.fromStatus} to {h.toStatus}
+          Updated by this sprint: evidence {h.fromEvidence} to {h.toEvidence}, {h.fromStatus} to {h.toStatus}
           {h.note ? `. ${h.note}` : ""}
         </div>
       ))}

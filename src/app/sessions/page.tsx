@@ -16,7 +16,7 @@ export default async function SessionsPage() {
 
   return (
     <div className="max-w-4xl">
-      <PageTitle title="Sessions" sub="Each time you went out and collected evidence, like an event night or a day of interviews. One session can serve several experiments." />
+      <PageTitle title="Sessions" sub="Each time you went out and collected evidence, like an event night or a day of interviews. One session can serve several sprints." />
       <div className="space-y-3">
         {rows.map((r) => {
           const interviews = r.evidence.filter((e) => e.interview);
@@ -34,7 +34,7 @@ export default async function SessionsPage() {
               {r.notes && <div className="mt-1 text-sm text-muted">{r.notes}</div>}
               <div className="mt-2 flex flex-wrap gap-1">
                 {r.experiments.map(({ experiment: e }) => (
-                  <Link key={e.id} href={`/experiments/${e.id}`}>
+                  <Link key={e.id} href={`/sprints/${e.id}`}>
                     <Pill className="bg-orange-50 text-orange-900 hover:bg-orange-100">{experimentName(e)}</Pill>
                   </Link>
                 ))}

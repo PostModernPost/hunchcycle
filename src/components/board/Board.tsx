@@ -108,12 +108,12 @@ function BoardInner({ cards, lists, initialOpen }: Props) {
       {toReview > 0 && (
         <p className="mb-3 text-sm text-muted">
           <span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-violet-800" />
-          {toReview} imported experiment{toReview === 1 ? " needs" : "s need"} a review. Open one and click &quot;Mark reviewed&quot; once it looks right.
+          {toReview} imported sprint{toReview === 1 ? " needs" : "s need"} a review. Open one and click &quot;Mark reviewed&quot; once it looks right.
         </p>
       )}
       {running > WIP_LIMIT && (
         <div className="mb-3 rounded-md bg-amber-100 px-3 py-2 text-sm text-amber-900">
-          {running} experiments are running. More than {WIP_LIMIT} at once makes it hard to learn from any of them.
+          {running} sprints are running. More than {WIP_LIMIT} at once makes it hard to learn from any of them.
         </div>
       )}
 
@@ -122,7 +122,7 @@ function BoardInner({ cards, lists, initialOpen }: Props) {
         <div className="-mx-4 overflow-x-auto px-4 pb-4">
           <div className="grid min-w-max gap-y-2" style={GRID}>
             <HeaderRow />
-            {active.length === 0 && <div className="col-span-full py-6 text-sm text-muted">No experiments match.</div>}
+            {active.length === 0 && <div className="col-span-full py-6 text-sm text-muted">No sprints match.</div>}
             {active.map((c) => (
               <Row key={c.id} card={c} now={now} dragging={dragId === c.id} onOpen={open} />
             ))}
@@ -139,7 +139,7 @@ function BoardInner({ cards, lists, initialOpen }: Props) {
 
       <div className="mt-4">
         <button className="text-sm text-muted hover:text-ink" onClick={() => setShowFinished(!showFinished)}>
-          {showFinished ? "Hide" : "Show"} finished experiments ({finished.length})
+          {showFinished ? "Hide" : "Show"} finished sprints ({finished.length})
         </button>
         {showFinished && (
           <div className="-mx-4 mt-2 overflow-x-auto px-4 pb-4">
@@ -202,10 +202,10 @@ function Toolbar({
         <TypePicker types={types} value={typeId} onPick={setTypeId} placeholder="Pick a type" className="w-48" />
         <input className={`${inputCls} w-56`} placeholder="Subtitle (optional)" value={title} onChange={(e) => setTitle(e.target.value)} />
         <Button type="submit" kind="primary" disabled={pending || !typeId}>
-          Add experiment
+          Add sprint
         </Button>
       </form>
-      <input className={`${inputCls} ml-auto w-56`} placeholder="Search experiments" value={query} onChange={(e) => setQuery(e.target.value)} />
+      <input className={`${inputCls} ml-auto w-56`} placeholder="Search sprints" value={query} onChange={(e) => setQuery(e.target.value)} />
     </div>
   );
 }
@@ -213,7 +213,7 @@ function Toolbar({
 function HeaderRow() {
   return (
     <>
-      <div className="sticky left-0 z-10 bg-paper pr-3 text-xs font-semibold uppercase tracking-wide text-muted">Experiment</div>
+      <div className="sticky left-0 z-10 bg-paper pr-3 text-xs font-semibold uppercase tracking-wide text-muted">Sprint</div>
       {BOARD_STAGES.map((s) => (
         <div key={s} className="flex items-center gap-1.5 px-3 text-xs font-semibold uppercase tracking-wide text-muted">
           <span className="h-2 w-2 rounded-full" style={{ background: stageColor(s) }} />
@@ -282,7 +282,7 @@ function FinishedRow({ card: c, onOpen }: { card: BoardCard; onOpen: Opener }) {
         {c.decisionNote && <span className="line-clamp-1 flex-1 text-muted">{c.decisionNote}</span>}
         <span className="ml-auto" onClick={(e) => e.stopPropagation()}>
           <Button kind="quiet" disabled={pending} onClick={() => run(() => createNextExperiment(c.id), (r) => r.ok && r.id && onOpen(r.id))}>
-            Start next cycle
+            Start next sprint
           </Button>
         </span>
       </div>

@@ -63,3 +63,7 @@ Choices made during the build that the brief didn't spell out.
 - Not done (Adam passed on it): collapsing the toolbar into one "New experiment" button.
 - **Reverted the type grouping (same day).** Adam didn't like active and finished cycles mixed together. Active experiments are rows again (past report date first, then furthest along); finished ones sit in a separate "Show finished experiments" section as slim lines, newest first, each with "Start next cycle". The other simplifications stay.
 
+## Sprints (2026-10-22)
+
+- **Experiments are called "sprints" everywhere in the UI**, at Adam's request (his coaching doc already says "Sprint 1", "Sprint 2"). Code, tables, and the BRIEF keep the word "experiment". Buttons read "Add sprint", "Start next sprint", "Close sprint"; the detail page moved to `/sprints/[id]` and `/experiments/[id]` redirects there.
+

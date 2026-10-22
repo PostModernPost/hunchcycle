@@ -20,7 +20,7 @@ type Named = { title: string | null; cycleNumber: number | null; type?: { name: 
 /** "Customer Interviews 2". Falls back to the subtitle for an experiment with no type. */
 export function experimentName(e: Named): string {
   if (e.type) return `${e.type.name} ${e.cycleNumber ?? ""}`.trim();
-  return e.title || "Untitled experiment";
+  return e.title || "Untitled sprint";
 }
 
 /** The optional subtitle (also the MVP name), shown under the name. */
