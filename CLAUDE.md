@@ -1,0 +1,39 @@
+# Hunchcycle: working notes for Claude
+
+Read `BRIEF.md` first. It is the spec and the source of truth for v1. `DECISIONS.md` records choices made during the build that the brief didn't cover. Add to it when you make a new one.
+
+## Who this is for
+
+Adam Waitt (founder of Play Action) is building this to replace the Google Doc and spreadsheet his lean startup coach uses to run their coaching. v1 is single-team (Play Action) with two roles, owner and coach. Adam is not a developer; explain what you did in plain language and keep him in the loop at each milestone.
+
+## Status
+
+- Milestone 1 is done: Drizzle schema (`src/db/schema.ts`), migrations (`drizzle/`), seed import (`scripts/seed.ts`), read-only list pages for experiments, assumptions, runs, people, interviews, scripts, and questions.
+- Next: Milestone 2 (BRIEF section 12): the board with drag and drop (dnd-kit), card drawer with progressive sections, stage gates from BRIEF section 4, split, WIP warning, stale flag.
+- Stop after each milestone, summarize what was built, and wait for Adam to check it before starting the next.
+
+## Open items to confirm with Adam
+
+- Did the Game Day Pilot actually launch? It's seeded as Running.
+- Did the Sprint 2 Google Ads test produce results? It's seeded as Running, past its report date.
+- All seeded assumptions and experiments carry the tag "seeded, review me". Importance and evidence scores were estimated.
+
+## Running locally
+
+- Needs a Postgres database. Simplest on Adam's machine: use the Supabase project directly. Put its connection strings in `.env` (see `.env.example`): `DATABASE_URL` is the pooled string (port 6543, `?pgbouncer=true`), `DIRECT_URL` is the direct one (port 5432). Never commit `.env`.
+- `npm install`, `npm run db:migrate`, `npm run seed`, `npm run dev`.
+- Seed files are NOT in the repo (real names and emails). They go in `seed/private/interviews.xlsx` and `seed/private/coaching-doc.docx`, which is gitignored. Adam has the originals ("Customer Interview Script (Responses).xlsx" and "Coaching - Adam Waitt.docx"). `npm run seed` wipes the database before loading.
+
+## Infrastructure
+
+- GitHub: `PostModernPost/hunchcycle` (private), branch `main`.
+- Supabase: project ref `iumefduhzfimwiytqdcp` in the Hunchcycle org. Empty so far; migrations and seed have not been run against it.
+- Vercel: team "Adam Waitt's projects" (`team_Rg04dlv2tXWKdPDKgOFeU77S`). No project created yet. Deploy only when Adam says to (milestone 6). Env vars needed: `DATABASE_URL`, `DIRECT_URL`, `OWNER_PASSWORD`, `COACH_PASSWORD`, `SESSION_SECRET`.
+- Domains: hunchcycle.com and hunchcycle.app, bought on Squarespace. DNS will need to point at Vercel at deploy time.
+
+## Conventions
+
+- Stack: Next.js 15 App Router, TypeScript, Tailwind v4, Drizzle ORM with postgres-js. Prisma was dropped (see DECISIONS.md).
+- Server components query the database directly through `src/db`. Pages that read data use `export const dynamic = "force-dynamic"`.
+- Keep the v1 scope cap in BRIEF section 11. If something outside it seems necessary for the core loop, ask Adam first.
+- User-facing copy: plain, direct words. No em dashes or en dashes anywhere in UI text or docs written for Adam; use commas, periods, or parentheses.
