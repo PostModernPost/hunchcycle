@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 };
 
 const nav = [
-  { href: "/experiments", label: "Experiments" },
+  { href: "/", label: "Board" },
   { href: "/assumptions", label: "Assumptions" },
   { href: "/runs", label: "Runs" },
   { href: "/people", label: "People" },
@@ -20,7 +20,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="en">
       <body className="min-h-screen antialiased">
         <header className="border-b border-line bg-white">
-          <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
+          <div className="mx-auto flex max-w-[1800px] flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
             <Link href="/" className="text-lg font-semibold tracking-tight">
               Hunch<span className="text-accent">cycle</span>
             </Link>
@@ -33,7 +33,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             </nav>
           </div>
         </header>
-        <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
+        <main className="mx-auto max-w-[1800px] px-4 py-6">{children}</main>
       </body>
     </html>
   );

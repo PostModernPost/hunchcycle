@@ -1,0 +1,148 @@
+"use client";
+// Small inputs for the card drawer. Each saves on blur, only when the value changed.
+import { createContext, useContext, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { filled } from "@/lib/gates";
+
+type ActionResult = { ok: true; id?: string } | { ok: false; error: string };
+
+export const ToastContext = createContext<(msg: string) => void>(() => {});
+
+/** Runs a server action, shows any error, then refreshes the board data. */
+export function useAction() {
+  const router = useRouter();
+  const toast = useContext(ToastContext);
+  const [pending, start] = useTransition();
+  const run = (fn: () => Promise<ActionResult>, after?: (r: ActionResult) => void) =>
+    new Promise<ActionResult>((resolve) =>
+      start(async () => {
+        const r = await fn();
+        if (!r.ok) toast(r.error);
+        router.refresh();
+        after?.(r);
+        resolve(r);
+      }),
+    );
+  return { run, pending };
+}
+
+export const inputCls =
+  "w-full rounded-md border border-line bg-white px-2 py-1.5 text-sm focus:border-stone-500 focus:outline-none disabled:bg-stone-50 disabled:text-muted";
+
+export function Label({ text, required, children }: { text: string; required?: boolean; children: React.ReactNode }) {
+  return (
+    <label className="mb-3 block">
+      <span className="mb-1 block text-xs font-medium text-muted">
+        {text}
+        {required && <span className="text-accent"> *</span>}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+const show = (v: string | number | null | undefined) => (typeof v === "number" ? String(v) : filled(v) ? (v as string) : "");
+
+export function TextInput({
+  label,
+  value,
+  onSave,
+  multiline,
+  required,
+  type = "text",
+  placeholder,
+  disabled,
+}: {
+  label: string;
+  value: string | number | null | undefined;
+  onSave: (v: string) => void;
+  multiline?: boolean;
+  required?: boolean;
+  type?: "text" | "number" | "date";
+  placeholder?: string;
+  disabled?: boolean;
+}) {
+  const initial = show(value);
+  const [saved, setSaved] = useState(initial);
+  const blur = (v: string) => {
+    if (v === saved) return;
+    setSaved(v);
+    onSave(v);
+  };
+  const common = {
+    defaultValue: initial,
+    placeholder: placeholder ?? (required ? "Required" : ""),
+    disabled,
+    className: inputCls,
+  };
+  return (
+    <Label text={label} required={required}>
+      {multiline ? (
+        <textarea {...common} rows={4} onBlur={(e) => blur(e.target.value)} />
+      ) : (
+        <input {...common} type={type} onBlur={(e) => blur(e.target.value)} />
+      )}
+    </Label>
+  );
+}
+
+export function SelectInput({
+  label,
+  value,
+  options,
+  onSave,
+  required,
+  blank = "Choose...",
+}: {
+  label: string;
+  value: string | null | undefined;
+  options: { value: string; label: string }[];
+  onSave: (v: string) => void;
+  required?: boolean;
+  blank?: string;
+}) {
+  return (
+    <Label text={label} required={required}>
+      <select className={inputCls} defaultValue={value ?? ""} onChange={(e) => onSave(e.target.value)}>
+        <option value="">{blank}</option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </Label>
+  );
+}
+
+export function Button({
+  children,
+  onClick,
+  disabled,
+  kind = "secondary",
+  type = "button",
+}: {
+  children: React.ReactNode;
+  onClick?: () => void;
+  disabled?: boolean;
+  kind?: "primary" | "secondary" | "quiet";
+  type?: "button" | "submit";
+}) {
+  const styles = {
+    primary: "bg-stone-900 text-white hover:bg-stone-700 disabled:bg-stone-300",
+    secondary: "border border-line bg-white hover:border-stone-400 disabled:text-muted",
+    quiet: "text-muted hover:text-ink",
+  }[kind];
+  return (
+    <button type={type} onClick={onClick} disabled={disabled} className={`whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${styles}`}>
+      {children}
+    </button>
+  );
+}
+
+/** Date as yyyy-mm-dd in Pacific time, for date inputs. */
+export function dateInput(d: Date | string | null | undefined): string {
+  if (!d) return "";
+  const date = typeof d === "string" ? new Date(d) : d;
+  return date.toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
+}

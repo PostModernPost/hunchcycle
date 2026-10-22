@@ -1,0 +1,245 @@
+"use server";
+// Board and card drawer writes. Every forward move is re-checked against the gates here.
+import { revalidatePath } from "next/cache";
+import { and, eq, max } from "drizzle-orm";
+import { db, schema as s } from "@/db";
+import { loadCard } from "@/lib/board-data";
+import { blockedMessage, checkMove, toGateCard, type Stage } from "@/lib/gates";
+
+type Result = { ok: true; id?: string } | { ok: false; error: string };
+
+const done = (id?: string): Result => {
+  revalidatePath("/");
+  revalidatePath("/experiments/[id]", "page");
+  return { ok: true, id };
+};
+
+// "2026-10-29" from a date input, stored at noon Pacific like the seed.
+const toDate = (v: unknown) => (typeof v === "string" && v ? new Date(`${v}T12:00:00-07:00`) : null);
+const toText = (v: unknown) => (typeof v === "string" && v.trim() ? v : null);
+const toInt = (v: unknown) => {
+  const n = typeof v === "number" ? v : parseInt(String(v ?? ""), 10);
+  return Number.isFinite(n) ? n : null;
+};
+
+// ---------- Cards ----------
+
+export async function createCard(title: string): Promise<Result> {
+  if (!title.trim()) return { ok: false, error: "Give the card a title." };
+  const [row] = await db.insert(s.experiments).values({ title: title.trim(), stage: "assumption" }).returning();
+  return done(row.id);
+}
+
+export async function moveCard(id: string, to: Stage): Promise<Result> {
+  if (to === "closed") return closeCard(id);
+  const card = await loadCard(id);
+  if (!card) return { ok: false, error: "Card not found." };
+  const check = checkMove(toGateCard(card), to);
+  if (!check.ok) return { ok: false, error: blockedMessage(check) };
+  await db.update(s.experiments).set({ stage: to, closedAt: null, updatedAt: new Date() }).where(eq(s.experiments.id, id));
+  return done();
+}
+
+export async function closeCard(id: string): Promise<Result> {
+  const card = await loadCard(id);
+  if (!card) return { ok: false, error: "Card not found." };
+  const check = checkMove(toGateCard(card), "closed");
+  if (!check.ok) return { ok: false, error: blockedMessage(check) };
+  await db.update(s.experiments).set({ stage: "closed", closedAt: new Date(), updatedAt: new Date() }).where(eq(s.experiments.id, id));
+  return done();
+}
+
+const TEXT_FIELDS = ["title", "who", "action", "howMany", "byWhen", "becauseNote", "channel", "rawLearnings", "insights", "decisionNote", "notes"] as const;
+const METHODS = s.method.enumValues;
+const DECISIONS = s.decision.enumValues;
+
+export async function updateCard(id: string, field: string, value: unknown): Promise<Result> {
+  let patch: Partial<typeof s.experiments.$inferInsert>;
+  if ((TEXT_FIELDS as readonly string[]).includes(field)) {
+    if (field === "title" && !toText(value)) return { ok: false, error: "The title can't be empty." };
+    patch = { [field]: toText(value) };
+  } else if (field === "method") {
+    patch = { method: METHODS.includes(value as never) ? (value as (typeof METHODS)[number]) : null };
+  } else if (field === "decision") {
+    patch = { decision: DECISIONS.includes(value as never) ? (value as (typeof DECISIONS)[number]) : null };
+  } else if (field === "startDate" || field === "reportDate") {
+    patch = { [field]: toDate(value) };
+  } else if (field === "sampleSizeTarget") {
+    patch = { sampleSizeTarget: toInt(value) };
+  } else if (field === "scriptId") {
+    patch = { scriptId: toText(value) };
+  } else {
+    return { ok: false, error: `Unknown field ${field}` };
+  }
+  await db.update(s.experiments).set({ ...patch, updatedAt: new Date() }).where(eq(s.experiments.id, id));
+  return done();
+}
+
+/** Split from Hypothesis: a sibling card with the same assumptions and hypothesis. */
+export async function splitCard(id: string): Promise<Result> {
+  const card = await loadCard(id);
+  if (!card) return { ok: false, error: "Card not found." };
+  if (card.stage !== "hypothesis") return { ok: false, error: "Cards can only be split from the Hypothesis column." };
+  const group = card.siblingGroup ?? crypto.randomUUID();
+  if (!card.siblingGroup) await db.update(s.experiments).set({ siblingGroup: group }).where(eq(s.experiments.id, id));
+  const [copy] = await db
+    .insert(s.experiments)
+    .values({
+      title: `${card.title} (variant)`,
+      stage: "hypothesis",
+      who: card.who,
+      action: card.action,
+      howMany: card.howMany,
+      byWhen: card.byWhen,
+      becauseNote: card.becauseNote,
+      siblingGroup: group,
+    })
+    .returning();
+  if (card.assumptions.length)
+    await db.insert(s.experimentAssumptions).values(card.assumptions.map((a) => ({ experimentId: copy.id, assumptionId: a.id })));
+  return done(copy.id);
+}
+
+// ---------- Assumptions ----------
+
+export async function linkAssumption(experimentId: string, assumptionId: string): Promise<Result> {
+  await db.insert(s.experimentAssumptions).values({ experimentId, assumptionId }).onConflictDoNothing();
+  return done();
+}
+
+export async function unlinkAssumption(experimentId: string, assumptionId: string): Promise<Result> {
+  await db
+    .delete(s.experimentAssumptions)
+    .where(and(eq(s.experimentAssumptions.experimentId, experimentId), eq(s.experimentAssumptions.assumptionId, assumptionId)));
+  return done();
+}
+
+export async function createAssumption(
+  experimentId: string,
+  v: { statement: string; category: string; importance: number; evidence: number },
+): Promise<Result> {
+  if (!v.statement.trim()) return { ok: false, error: "Write the assumption first." };
+  const category = s.assumptionCategory.enumValues.includes(v.category as never)
+    ? (v.category as (typeof s.assumptionCategory.enumValues)[number])
+    : "other";
+  const [a] = await db
+    .insert(s.assumptions)
+    .values({ statement: v.statement.trim(), category, importance: clamp(v.importance, 1, 5), evidence: clamp(v.evidence, 1, 5) })
+    .returning();
+  await db.insert(s.experimentAssumptions).values({ experimentId, assumptionId: a.id });
+  return done(a.id);
+}
+
+/** Decision column: record the new evidence and status for one linked assumption. */
+export async function updateAssumptionFromDecision(
+  experimentId: string,
+  assumptionId: string,
+  v: { evidence: number; status: string; note: string },
+): Promise<Result> {
+  const [a] = await db.select().from(s.assumptions).where(eq(s.assumptions.id, assumptionId));
+  if (!a) return { ok: false, error: "Assumption not found." };
+  const status = s.assumptionStatus.enumValues.includes(v.status as never)
+    ? (v.status as (typeof s.assumptionStatus.enumValues)[number])
+    : a.status;
+  const evidence = clamp(v.evidence, 1, 5);
+  await db.insert(s.assumptionHistory).values({
+    assumptionId,
+    experimentId,
+    fromEvidence: a.evidence,
+    toEvidence: evidence,
+    fromStatus: a.status,
+    toStatus: status,
+    note: toText(v.note),
+  });
+  await db.update(s.assumptions).set({ evidence, status, updatedAt: new Date() }).where(eq(s.assumptions.id, assumptionId));
+  return done();
+}
+
+// ---------- Metrics ----------
+
+export async function addMetric(experimentId: string): Promise<Result> {
+  const [{ n }] = await db.select({ n: max(s.metrics.order) }).from(s.metrics).where(eq(s.metrics.experimentId, experimentId));
+  const [m] = await db
+    .insert(s.metrics)
+    .values({ experimentId, name: "New metric", type: "rate", order: (n ?? -1) + 1 })
+    .returning();
+  return done(m.id);
+}
+
+const METRIC_TEXT = ["name", "source", "passLine", "passDecision", "killLine", "killDecision"] as const;
+
+export async function updateMetric(id: string, field: string, value: unknown): Promise<Result> {
+  let patch: Partial<typeof s.metrics.$inferInsert>;
+  if ((METRIC_TEXT as readonly string[]).includes(field)) {
+    if (field === "name" && !toText(value)) return { ok: false, error: "The metric needs a name." };
+    patch = { [field]: toText(value) };
+  } else if (field === "type") {
+    patch = { type: s.metricType.enumValues.includes(value as never) ? (value as "rate") : "rate" };
+  } else if (field === "result") {
+    patch = { result: s.metricResult.enumValues.includes(value as never) ? (value as "pass") : null };
+  } else {
+    return { ok: false, error: `Unknown field ${field}` };
+  }
+  await db.update(s.metrics).set(patch).where(eq(s.metrics.id, id));
+  return done();
+}
+
+export async function deleteMetric(id: string): Promise<Result> {
+  await db.delete(s.metrics).where(eq(s.metrics.id, id));
+  return done();
+}
+
+/** A reading with linked evidence is verified; one without is shown as unverified. */
+export async function addReading(
+  metricId: string,
+  v: { numerator: string; denominator: string; value: string; date: string; note: string; evidenceId: string },
+): Promise<Result> {
+  const numerator = toInt(v.numerator);
+  const denominator = toInt(v.denominator);
+  const value = numerator != null && denominator ? numerator / denominator : v.value.trim() ? Number(v.value) : null;
+  if (value == null || !Number.isFinite(value)) return { ok: false, error: "Enter a number, or a count out of a total." };
+  const [r] = await db
+    .insert(s.metricReadings)
+    .values({
+      metricId,
+      numerator,
+      denominator,
+      value,
+      date: toDate(v.date) ?? new Date(),
+      note: toText(v.note),
+      verified: !!v.evidenceId,
+    })
+    .returning();
+  if (v.evidenceId) await db.insert(s.readingEvidence).values({ readingId: r.id, evidenceId: v.evidenceId });
+  return done();
+}
+
+// ---------- Runs and evidence ----------
+
+export async function linkRun(experimentId: string, runId: string): Promise<Result> {
+  await db.insert(s.experimentRuns).values({ experimentId, runId }).onConflictDoNothing();
+  return done();
+}
+
+export async function unlinkRun(experimentId: string, runId: string): Promise<Result> {
+  await db.delete(s.experimentRuns).where(and(eq(s.experimentRuns.experimentId, experimentId), eq(s.experimentRuns.runId, runId)));
+  return done();
+}
+
+export async function createRun(experimentId: string, v: { name: string; date: string }): Promise<Result> {
+  if (!v.name.trim()) return { ok: false, error: "Give the run a name." };
+  const [run] = await db.insert(s.runs).values({ name: v.name.trim(), startDate: toDate(v.date) }).returning();
+  await db.insert(s.experimentRuns).values({ experimentId, runId: run.id });
+  return done(run.id);
+}
+
+export async function addEvidence(runId: string, v: { type: string; summary: string }): Promise<Result> {
+  if (!v.summary.trim()) return { ok: false, error: "Write what you saw or heard." };
+  const type = s.evidenceType.enumValues.includes(v.type as never) ? (v.type as "observation") : "observation";
+  await db.insert(s.evidence).values({ runId, type, summary: v.summary.trim() });
+  return done();
+}
+
+function clamp(n: number, lo: number, hi: number) {
+  return Math.min(hi, Math.max(lo, Math.round(Number(n) || lo)));
+}

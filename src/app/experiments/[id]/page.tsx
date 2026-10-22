@@ -23,8 +23,8 @@ export default async function ExperimentDetail({ params }: { params: Promise<{ i
 
   return (
     <div className="max-w-3xl">
-      <Link href="/experiments" className="text-sm text-muted hover:text-ink">
-        ← Experiments
+      <Link href={`/?card=${e.id}`} className="text-sm text-muted hover:text-ink">
+        ← Back to the board
       </Link>
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <Pill>{STAGE_LABELS[e.stage]}</Pill>
