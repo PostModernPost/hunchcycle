@@ -24,14 +24,16 @@ const toInt = (v: unknown) => {
 
 // ---------- Cards ----------
 
-export async function createCard(title: string): Promise<Result> {
-  if (!title.trim()) return { ok: false, error: "Give the card a title." };
+export async function createCard(title: string, assumptionId?: string): Promise<Result> {
+  if (!title.trim()) return { ok: false, error: "Give the experiment a title." };
   const [row] = await db.insert(s.experiments).values({ title: title.trim(), stage: "assumption" }).returning();
+  if (assumptionId) await db.insert(s.experimentAssumptions).values({ experimentId: row.id, assumptionId });
   return done(row.id);
 }
 
 export async function moveCard(id: string, to: Stage): Promise<Result> {
   if (to === "closed") return closeCard(id);
+  if (to === "metrics") to = "experiment";
   const card = await loadCard(id);
   if (!card) return { ok: false, error: "Card not found." };
   const check = checkMove(toGateCard(card), to);
@@ -238,7 +240,7 @@ export async function unlinkRun(experimentId: string, runId: string): Promise<Re
 }
 
 export async function createRun(experimentId: string, v: { name: string; date: string }): Promise<Result> {
-  if (!v.name.trim()) return { ok: false, error: "Give the run a name." };
+  if (!v.name.trim()) return { ok: false, error: "Give the session a name." };
   const [run] = await db.insert(s.runs).values({ name: v.name.trim(), startDate: toDate(v.date) }).returning();
   await db.insert(s.experimentRuns).values({ experimentId, runId: run.id });
   return done(run.id);

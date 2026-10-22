@@ -1,6 +1,7 @@
 // Loads experiments in the shape the board and drawer need. Server only.
 import { eq } from "drizzle-orm";
 import { db, schema as s } from "@/db";
+import { flowStage } from "@/lib/gates";
 
 async function query(id?: string) {
   const rows = await db.query.experiments.findMany({
@@ -22,6 +23,7 @@ async function query(id?: string) {
     const own = history.filter((h) => h.experimentId === e.id);
     return {
       ...e,
+      stage: flowStage(e.stage),
       assumptions: assumptions.map((x) => x.assumption),
       runs: runs.map((x) => x.run),
       history: own,

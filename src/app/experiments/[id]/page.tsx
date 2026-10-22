@@ -94,10 +94,10 @@ export default async function ExperimentDetail({ params }: { params: Promise<{ i
         ))}
       </Section>
 
-      <Section title="Runs">
+      <Section title="Sessions">
         {e.runs.map(({ run }) => (
           <div key={run.id} className="text-sm">
-            <Link href={`/runs#${run.id}`} className="hover:underline">
+            <Link href={`/sessions#${run.id}`} className="hover:underline">
               {run.name}
             </Link>{" "}
             <span className="text-muted">{fmtDate(run.startDate)}</span>

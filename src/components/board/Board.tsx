@@ -6,7 +6,7 @@ import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { DndContext, DragOverlay, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import type { BoardCard } from "@/lib/board-data";
 import { BOARD_STAGES, blockedMessage, checkMove, filled, isStale, missingFor, toGateCard, type Stage } from "@/lib/gates";
-import { fmtDate, STAGE_LABELS } from "@/lib/format";
+import { fmtDate, STAGE_LABELS, STATUS_STYLES } from "@/lib/format";
 import { Pill, SeedFlag } from "@/components/ui";
 import { createCard, createNextExperiment, moveCard } from "@/app/actions";
 import { Drawer, type Lists } from "./Drawer";
@@ -17,7 +17,15 @@ const STAGE_INDEX = Object.fromEntries(BOARD_STAGES.map((s, i) => [s, i])) as Re
 const GRID = { gridTemplateColumns: `250px repeat(${BOARD_STAGES.length}, 180px)` };
 export const stageColor = (s: Stage) => `var(--color-stage-${s === "closed" ? "decision" : s})`;
 
-type Props = { cards: BoardCard[]; lists: Lists; initialOpen?: string };
+type View = "list" | "assumptions";
+type Props = { cards: BoardCard[]; lists: Lists; initialOpen?: string; initialView?: View };
+type Assumption = Lists["assumptions"][number];
+type Scored = { importance: number; evidence: number };
+
+// Riskiest first: most important, least evidence.
+const riskier = (a: Scored, b: Scored) => b.importance - a.importance || a.evidence - b.evidence;
+/** The assumption an experiment is filed under when grouping: its riskiest linked one. */
+const primaryOf = (c: BoardCard) => [...c.assumptions].sort(riskier)[0] ?? null;
 type Opener = (id: string | null, focus?: Stage) => void;
 
 export function Board(props: Props) {
@@ -43,7 +51,7 @@ export function Board(props: Props) {
   );
 }
 
-function BoardInner({ cards, lists, initialOpen }: Props) {
+function BoardInner({ cards, lists, initialOpen, initialView = "list" }: Props) {
   const toast = useContext(ToastContext);
   const { run } = useAction();
   const [openState, setOpenState] = useState<{ id: string; focus?: Stage } | null>(initialOpen ? { id: initialOpen } : null);
@@ -51,16 +59,24 @@ function BoardInner({ cards, lists, initialOpen }: Props) {
   const [dragId, setDragId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [showClosed, setShowClosed] = useState(false);
+  const [view, setView] = useState<View>(initialView);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const now = useMemo(() => new Date(), []);
 
-  // Keep the open card in the URL so a link or reload reopens it.
+  // Keep the open card and the view in the URL so a link or reload brings them back.
+  const setParam = (key: string, value: string | null) => {
+    const url = new URL(window.location.href);
+    if (value) url.searchParams.set(key, value);
+    else url.searchParams.delete(key);
+    window.history.replaceState(null, "", url);
+  };
   const open: Opener = (id, focus) => {
     setOpenState(id ? { id, focus } : null);
-    const url = new URL(window.location.href);
-    if (id) url.searchParams.set("card", id);
-    else url.searchParams.delete("card");
-    window.history.replaceState(null, "", url);
+    setParam("card", id);
+  };
+  const switchView = (v: View) => {
+    setView(v);
+    setParam("view", v === "list" ? null : v);
   };
 
   const withStage = (c: BoardCard) => ({ ...c, stage: moved[c.id] ?? c.stage });
@@ -96,7 +112,7 @@ function BoardInner({ cards, lists, initialOpen }: Props) {
 
   return (
     <>
-      <Toolbar query={query} setQuery={setQuery} onCreated={(id) => open(id)} />
+      <Toolbar query={query} setQuery={setQuery} onCreated={(id) => open(id)} view={view} setView={switchView} />
       {running > WIP_LIMIT && (
         <div className="mb-3 rounded-md bg-amber-100 px-3 py-2 text-sm text-amber-900">
           {running} experiments are running. More than {WIP_LIMIT} at once makes it hard to learn from any of them.
@@ -108,10 +124,12 @@ function BoardInner({ cards, lists, initialOpen }: Props) {
         <div className="-mx-4 overflow-x-auto px-4 pb-4">
           <div className="grid min-w-max gap-y-2" style={GRID}>
             <HeaderRow />
-            {active.length === 0 && <div className="col-span-full py-6 text-sm text-muted">No experiments match.</div>}
-            {active.map((c) => (
-              <Row key={c.id} card={c} now={now} dragging={dragId === c.id} onOpen={open} />
-            ))}
+            {active.length === 0 && view === "list" && <div className="col-span-full py-6 text-sm text-muted">No experiments match.</div>}
+            {view === "list" ? (
+              active.map((c) => <Row key={c.id} card={c} now={now} dragging={dragId === c.id} onOpen={open} />)
+            ) : (
+              <Grouped cards={showClosed ? visible : active} assumptions={lists.assumptions} now={now} dragId={dragId} onOpen={open} searching={!!q} />
+            )}
           </div>
         </div>
         <DragOverlay dropAnimation={null}>
@@ -125,9 +143,9 @@ function BoardInner({ cards, lists, initialOpen }: Props) {
 
       <div className="mt-4">
         <button className="text-sm text-muted hover:text-ink" onClick={() => setShowClosed(!showClosed)}>
-          {showClosed ? "Hide" : "Show"} closed experiments ({closed.length})
+          {showClosed ? "Hide" : "Show"} closed experiments ({closed.length}){view === "assumptions" && " in their groups"}
         </button>
-        {showClosed && (
+        {showClosed && view === "list" && (
           <div className="-mx-4 mt-2 overflow-x-auto px-4 pb-4">
             <div className="grid min-w-max gap-y-2" style={GRID}>
               {closed.map((c) => (
@@ -153,7 +171,19 @@ function BoardInner({ cards, lists, initialOpen }: Props) {
   );
 }
 
-function Toolbar({ query, setQuery, onCreated }: { query: string; setQuery: (q: string) => void; onCreated: (id: string) => void }) {
+function Toolbar({
+  query,
+  setQuery,
+  onCreated,
+  view,
+  setView,
+}: {
+  query: string;
+  setQuery: (q: string) => void;
+  onCreated: (id: string) => void;
+  view: View;
+  setView: (v: View) => void;
+}) {
   const [title, setTitle] = useState("");
   const { run, pending } = useAction();
   return (
@@ -178,7 +208,118 @@ function Toolbar({ query, setQuery, onCreated }: { query: string; setQuery: (q: 
           Add experiment
         </Button>
       </form>
-      <input className={`${inputCls} ml-auto w-56`} placeholder="Search experiments" value={query} onChange={(e) => setQuery(e.target.value)} />
+      <div className="ml-auto flex overflow-hidden rounded-md border border-line text-sm" role="group" aria-label="Board view">
+        <button onClick={() => setView("list")} className={`px-3 py-1.5 ${view === "list" ? "bg-raised font-medium text-ink" : "text-muted hover:text-ink"}`}>
+          List
+        </button>
+        <button onClick={() => setView("assumptions")} className={`px-3 py-1.5 ${view === "assumptions" ? "bg-raised font-medium text-ink" : "text-muted hover:text-ink"}`}>
+          Group by assumption
+        </button>
+      </div>
+      <input className={`${inputCls} w-56`} placeholder="Search experiments" value={query} onChange={(e) => setQuery(e.target.value)} />
+    </div>
+  );
+}
+
+/**
+ * Group by assumption: one band per assumption (riskiest first) with the experiments filed
+ * under it in the order they were started, so repeated cycles read top to bottom.
+ * An experiment that tests several assumptions appears once, under its riskiest one.
+ */
+function Grouped({
+  cards,
+  assumptions,
+  now,
+  dragId,
+  onOpen,
+  searching,
+}: {
+  cards: BoardCard[];
+  assumptions: Assumption[];
+  now: Date;
+  dragId: string | null;
+  onOpen: Opener;
+  searching: boolean;
+}) {
+  const [showUntested, setShowUntested] = useState(false);
+  const byAssumption = new Map<string, BoardCard[]>();
+  const unlinked: BoardCard[] = [];
+  for (const c of [...cards].sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt))) {
+    const p = primaryOf(c);
+    if (!p) unlinked.push(c);
+    else byAssumption.set(p.id, [...(byAssumption.get(p.id) ?? []), c]);
+  }
+  const sorted = [...assumptions].sort(riskier);
+  const withRows = sorted.filter((a) => byAssumption.has(a.id));
+  const without = sorted.filter((a) => !byAssumption.has(a.id));
+  const rows = (list: BoardCard[], bandId?: string) =>
+    list.map((c) => {
+      const also = c.assumptions.filter((a) => a.id !== bandId);
+      return c.stage === "closed" ? (
+        <ClosedRow key={c.id} card={c} onOpen={onOpen} alsoTests={also} />
+      ) : (
+        <Row key={c.id} card={c} now={now} dragging={dragId === c.id} onOpen={onOpen} alsoTests={also} />
+      );
+    });
+
+  return (
+    <>
+      {withRows.map((a) => (
+        <Band key={a.id} assumption={a} count={byAssumption.get(a.id)!.length} onOpen={onOpen}>
+          {rows(byAssumption.get(a.id)!, a.id)}
+        </Band>
+      ))}
+      {unlinked.length > 0 && (
+        <>
+          <div className="sticky left-0 col-span-full mt-4 text-sm font-semibold text-muted">No assumption linked yet</div>
+          {rows(unlinked)}
+        </>
+      )}
+      {!searching && without.length > 0 && (
+        <div className="sticky left-0 col-span-full mt-4 max-w-4xl">
+          <button className="text-sm text-muted hover:text-ink" onClick={() => setShowUntested(!showUntested)}>
+            {showUntested ? "Hide" : "Show"} assumptions with no experiment yet ({without.length})
+          </button>
+          {showUntested && (
+            <div className="mt-2 space-y-2">
+              {without.map((a) => (
+                <BandHeader key={a.id} assumption={a} onOpen={onOpen} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
+function Band({ assumption, count, onOpen, children }: { assumption: Assumption; count: number; onOpen: Opener; children: React.ReactNode }) {
+  return (
+    <>
+      <div id={`band-${assumption.id}`} className="sticky left-0 col-span-full mt-4 max-w-4xl scroll-mt-4">
+        <BandHeader assumption={assumption} count={count} onOpen={onOpen} />
+      </div>
+      {children}
+    </>
+  );
+}
+
+function BandHeader({ assumption: a, count, onOpen }: { assumption: Assumption; count?: number; onOpen: Opener }) {
+  const { run, pending } = useAction();
+  const short = a.statement.length > 60 ? a.statement.slice(0, 60).trimEnd() + "..." : a.statement;
+  return (
+    <div className="flex flex-wrap items-start gap-x-3 gap-y-1 rounded-lg border border-line bg-surface px-3 py-2">
+      <Pill className={STATUS_STYLES[a.status]}>{a.status}</Pill>
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-medium">{a.statement}</div>
+        <div className="text-xs text-muted">
+          {a.category}, importance {a.importance} of 5, evidence {a.evidence} of 5
+          {count != null && `, ${count} experiment${count === 1 ? "" : "s"}`}
+        </div>
+      </div>
+      <Button kind="quiet" disabled={pending} onClick={() => run(() => createCard(`Test: ${short}`, a.id), (r) => r.ok && r.id && onOpen(r.id))}>
+        + New experiment
+      </Button>
     </div>
   );
 }
@@ -197,7 +338,19 @@ function HeaderRow() {
   );
 }
 
-function TitleCell({ card: c, now, onOpen, children }: { card: BoardCard; now?: Date; onOpen: Opener; children?: React.ReactNode }) {
+function TitleCell({
+  card: c,
+  now,
+  onOpen,
+  alsoTests,
+  children,
+}: {
+  card: BoardCard;
+  now?: Date;
+  onOpen: Opener;
+  alsoTests?: { id: string; statement: string }[];
+  children?: React.ReactNode;
+}) {
   return (
     <div className="sticky left-0 z-10 bg-paper pr-3">
       <div className="h-full rounded-l-lg border-l-4 bg-surface p-3" style={{ borderLeftColor: stageColor(c.stage) }}>
@@ -209,18 +362,33 @@ function TitleCell({ card: c, now, onOpen, children }: { card: BoardCard; now?: 
           {c.siblingGroup && <Pill className="bg-sky-100 text-sky-800">split</Pill>}
           <SeedFlag tags={c.tags} />
         </div>
+        {alsoTests && alsoTests.length > 0 && (
+          <div className="mt-1.5 text-xs text-muted">
+            Also tests:{" "}
+            {alsoTests.map((a, i) => (
+              <span key={a.id}>
+                {i > 0 && ", "}
+                <a href={`#band-${a.id}`} className="underline decoration-dotted hover:text-ink" title={a.statement}>
+                  {a.statement.length > 40 ? a.statement.slice(0, 40).trimEnd() + "..." : a.statement}
+                </a>
+              </span>
+            ))}
+          </div>
+        )}
         {children}
       </div>
     </div>
   );
 }
 
-function Row({ card: c, now, dragging, onOpen }: { card: BoardCard; now: Date; dragging: boolean; onOpen: Opener }) {
+type AlsoTests = { id: string; statement: string }[];
+
+function Row({ card: c, now, dragging, onOpen, alsoTests }: { card: BoardCard; now: Date; dragging: boolean; onOpen: Opener; alsoTests?: AlsoTests }) {
   const current = STAGE_INDEX[c.stage];
   const missing = missingFor(c.stage, toGateCard(c)).length;
   return (
     <>
-      <TitleCell card={c} now={now} onOpen={onOpen}>
+      <TitleCell card={c} now={now} onOpen={onOpen} alsoTests={alsoTests}>
         <div className={`mt-1.5 text-xs ${missing ? "text-amber-700" : "text-green-700"}`}>
           {missing ? `${missing} to fill in ${STAGE_LABELS[c.stage]}` : `Ready to expand into ${STAGE_LABELS[BOARD_STAGES[current + 1]] ?? "closing"}`}
         </div>
@@ -238,11 +406,11 @@ function Row({ card: c, now, dragging, onOpen }: { card: BoardCard; now: Date; d
   );
 }
 
-function ClosedRow({ card: c, onOpen }: { card: BoardCard; onOpen: Opener }) {
+function ClosedRow({ card: c, onOpen, alsoTests }: { card: BoardCard; onOpen: Opener; alsoTests?: AlsoTests }) {
   const { run, pending } = useAction();
   return (
     <>
-      <TitleCell card={c} onOpen={onOpen}>
+      <TitleCell card={c} onOpen={onOpen} alsoTests={alsoTests}>
         <div className="mt-1 text-xs text-muted">Closed {fmtDate(c.closedAt)}</div>
         <div className="mt-2">
           <Button disabled={pending} onClick={() => run(() => createNextExperiment(c.id), (r) => r.ok && r.id && onOpen(r.id))}>
@@ -377,22 +545,16 @@ function Brief({ card: c, stage }: { card: BoardCard; stage: Stage }) {
         </>
       );
     case "experiment":
-      if (!c.method && !c.startDate) return none;
+      if (!c.method && !c.startDate && !c.metrics.length) return none;
       return (
         <>
           <p className="capitalize">{c.method?.replace("_", " ") ?? "No method"}</p>
-          {c.channel && <p className="line-clamp-1 text-muted">{c.channel}</p>}
-          <p className="mt-1 text-muted">
+          <p className="text-muted">
             {c.startDate ? fmtDate(c.startDate) : "No start"} to {c.reportDate ? fmtDate(c.reportDate) : "no report date"}
           </p>
-        </>
-      );
-    case "metrics":
-      if (!c.metrics.length) return none;
-      return (
-        <>
-          <p className="line-clamp-2">{c.metrics[0].name}</p>
-          {c.metrics.length > 1 && <p className="mt-1 text-muted">plus {c.metrics.length - 1} more</p>}
+          <p className="mt-1 line-clamp-2">
+            {c.metrics.length ? `${c.metrics.length} metric${c.metrics.length === 1 ? "" : "s"}: ${c.metrics[0].name}` : "No metrics yet"}
+          </p>
         </>
       );
     case "running": {
@@ -402,7 +564,7 @@ function Brief({ card: c, stage }: { card: BoardCard; stage: Stage }) {
       return (
         <>
           <p>
-            {c.runs.length} run{c.runs.length === 1 ? "" : "s"}, {evidence} evidence
+            {c.runs.length} session{c.runs.length === 1 ? "" : "s"}, {evidence} evidence
           </p>
           <p className="text-muted">
             {readings} reading{readings === 1 ? "" : "s"}

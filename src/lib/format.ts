@@ -7,7 +7,7 @@ export function fmtDate(d: Date | string | null | undefined): string {
 export const STAGE_LABELS: Record<string, string> = {
   assumption: "Assumption",
   hypothesis: "Hypothesis",
-  experiment: "Experiment",
+  experiment: "Test (MVP)",
   metrics: "Metrics",
   running: "Running",
   results: "Results",

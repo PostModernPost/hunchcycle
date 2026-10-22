@@ -37,3 +37,11 @@ Choices made during the build that the brief didn't spell out.
 - **"Create next experiment" pulled forward from milestone 4.** A closed experiment (row or drawer) can start a new one in Assumption, titled "(next)", with the same assumptions linked. Adding assumptions spawned in Results is still milestone 4.
 - **One fixed dark palette, no theme switch.** Adam asked for a soft dark look; BRIEF section 11 rules out theming and dark mode as features, so there is no toggle. Each column has its own hue. Tailwind's color scales are remapped in `globals.css` (low shades dark, high shades light) so existing pill classes read correctly on dark. `@theme static` keeps every color variable in the CSS, since the stage colors are only used from inline styles.
 
+## Milestone 2, second revision (2026-10-22, Adam's choices)
+
+- **Six columns.** The Experiment and Metrics columns are merged into **Test (MVP)**: method, channel, dates, script, and metrics are all designed there, and its gate needs both the old Experiment inputs and complete metrics. The `metrics` value stays in the database enum but is unused; `flowStage()` treats any card found there as being in `experiment` (the one seeded card there was moved). The enum value `experiment` keeps its name; only the label changed.
+- **Rows stay "experiments"** because that is the word Adam's coach already uses.
+- **"Run" is called "Session" in the app.** The table and code keep the name `runs`; the page moved to `/sessions` and `/runs` redirects there.
+- **Group by assumption** is a switch on the board (`?view=assumptions`), on trial; Adam may revert it. One band per assumption, riskiest first (importance high, evidence low). Each experiment appears once, under its riskiest linked assumption, with "Also tests" links to the others. Rows in a band are in the order they were started, so repeated cycles read top to bottom. "Show closed" puts closed experiments inline in their bands. Assumptions with no experiment are listed at the bottom, each with "+ New experiment", which creates an experiment already linked to it.
+- **Seeded placeholders** starting with "(not set" (including "(not set in doc) ...") count as empty.
+

@@ -4,7 +4,11 @@ import { STAGES } from "@/db/schema";
 import { STAGE_LABELS } from "@/lib/format";
 
 export type Stage = (typeof STAGES)[number];
-export const BOARD_STAGES = STAGES.filter((s) => s !== "closed");
+// Metrics are designed in the Test (MVP) step, so the "metrics" stage is no longer used
+// (it stays in the database enum; a card found there is treated as being in "experiment").
+export const FLOW: readonly Stage[] = STAGES.filter((s) => s !== "metrics");
+export const BOARD_STAGES: readonly Stage[] = FLOW.filter((s) => s !== "closed");
+export const flowStage = (s: Stage): Stage => (s === "metrics" ? "experiment" : s);
 
 export type GateCard = {
   stage: Stage;
@@ -40,12 +44,12 @@ export function toGateCard(
   return { ...c, assumptionIds: c.assumptions.map((a) => a.id), runIds: c.runs.map((r) => r.id) };
 }
 
-// Seeded placeholders like "(not set)" count as empty.
+// Seeded placeholders like "(not set)" or "(not set in doc) ..." count as empty.
 export function filled(v: unknown): boolean {
   if (v === null || v === undefined) return false;
   if (typeof v === "string") {
     const t = v.trim();
-    return t !== "" && !t.toLowerCase().startsWith("(not set)");
+    return t !== "" && !t.toLowerCase().startsWith("(not set");
   }
   return true;
 }
@@ -70,8 +74,6 @@ export function missingFor(stage: Stage, c: GateCard): string[] {
       if (!c.startDate) out.push("Start date");
       if (!c.reportDate) out.push("Report date");
       if ((c.method === "interviews" || c.method === "survey") && !c.scriptId) out.push("Script (needed for interviews and surveys)");
-      break;
-    case "metrics":
       if (c.metrics.length === 0) out.push("At least one metric");
       for (const m of c.metrics) {
         const gaps = [
@@ -85,7 +87,7 @@ export function missingFor(stage: Stage, c: GateCard): string[] {
       }
       break;
     case "running":
-      if (c.runIds.length === 0) out.push("Link at least one run");
+      if (c.runIds.length === 0) out.push("Link at least one session");
       break;
     case "results":
       for (const m of c.metrics) if (!m.result) out.push(`Result for "${m.name}"`);
@@ -109,11 +111,11 @@ export function missingFor(stage: Stage, c: GateCard): string[] {
  * Moving forward must pass every gate on the way.
  */
 export function checkMove(c: GateCard, target: Stage): { ok: true } | { ok: false; stage: Stage; missing: string[] } {
-  const from = STAGES.indexOf(c.stage);
-  const to = STAGES.indexOf(target);
+  const from = FLOW.indexOf(flowStage(c.stage));
+  const to = FLOW.indexOf(flowStage(target));
   for (let i = from; i < to; i++) {
-    const missing = missingFor(STAGES[i], c);
-    if (missing.length) return { ok: false, stage: STAGES[i], missing };
+    const missing = missingFor(FLOW[i], c);
+    if (missing.length) return { ok: false, stage: FLOW[i], missing };
   }
   return { ok: true };
 }

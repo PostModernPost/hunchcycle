@@ -3,16 +3,15 @@
 // the current column's section is open, earlier ones are collapsed.
 import { useState } from "react";
 import Link from "next/link";
-import { STAGES } from "@/db/schema";
 import type { BoardCard } from "@/lib/board-data";
-import { blockedMessage, checkMove, filled, missingFor, toGateCard, type Stage } from "@/lib/gates";
+import { blockedMessage, checkMove, filled, FLOW, missingFor, toGateCard, type Stage } from "@/lib/gates";
 import { fmtDate, pct, STAGE_LABELS, STATUS_STYLES } from "@/lib/format";
 import { Pill, SeedFlag } from "@/components/ui";
 import * as A from "@/app/actions";
 import { Button, dateInput, inputCls, Label, SelectInput, TextInput, useAction } from "./fields";
 
 export type Lists = {
-  assumptions: { id: string; statement: string; status: string }[];
+  assumptions: { id: string; statement: string; status: string; category: string; importance: number; evidence: number }[];
   runs: { id: string; name: string; startDate: Date | null }[];
   scripts: { id: string; name: string; versionLabel: string }[];
 };
@@ -43,14 +42,22 @@ export function Drawer({
 }) {
   const { run } = useAction();
   const save = (field: string) => (v: string) => run(() => A.updateCard(card.id, field, v));
-  const reached = card.stage === "closed" ? STAGES.length - 1 : STAGES.indexOf(card.stage);
+  const reached = FLOW.indexOf(card.stage);
   const sectionProps = { card, lists, save };
 
   const sections: { stage: Stage; body: React.ReactNode }[] = [
     { stage: "assumption", body: <AssumptionSection {...sectionProps} /> },
     { stage: "hypothesis", body: <HypothesisSection {...sectionProps} onOpen={onOpen} /> },
-    { stage: "experiment", body: <ExperimentSection {...sectionProps} /> },
-    { stage: "metrics", body: <MetricsSection {...sectionProps} /> },
+    {
+      stage: "experiment",
+      body: (
+        <>
+          <ExperimentSection {...sectionProps} />
+          <h4 className="mb-1 mt-4 text-xs font-semibold uppercase tracking-wide text-muted">Metrics</h4>
+          <MetricsSection {...sectionProps} />
+        </>
+      ),
+    },
     { stage: "running", body: <RunningSection {...sectionProps} /> },
     { stage: "results", body: <ResultsSection {...sectionProps} /> },
     { stage: "decision", body: <DecisionSection {...sectionProps} /> },
@@ -94,7 +101,7 @@ export function Drawer({
         <div className="px-5 py-4">
           <GateBox card={card} onOpen={onOpen} />
           {sections
-            .filter((s) => STAGES.indexOf(s.stage) <= reached)
+            .filter((s) => FLOW.indexOf(s.stage) <= reached)
             .map((s) => (
               <Section key={`${s.stage}-${card.stage}`} stage={s.stage} card={card} startOpen={s.stage === card.stage || s.stage === focus}>
                 {s.body}
@@ -146,7 +153,7 @@ function Section({ stage, card, startOpen, children }: { stage: Stage; card: Boa
 /** What it takes to move on, plus forward and back buttons. */
 function GateBox({ card, onOpen }: { card: BoardCard; onOpen: (id: string) => void }) {
   const { run, pending } = useAction();
-  const idx = STAGES.indexOf(card.stage);
+  const idx = FLOW.indexOf(card.stage);
   if (card.stage === "closed") {
     return (
       <div className="mb-4 rounded-lg border border-line bg-white p-3 text-sm">
@@ -162,8 +169,8 @@ function GateBox({ card, onOpen }: { card: BoardCard; onOpen: (id: string) => vo
       </div>
     );
   }
-  const next = STAGES[idx + 1];
-  const prev = idx > 0 ? STAGES[idx - 1] : null;
+  const next = FLOW[idx + 1];
+  const prev = idx > 0 ? FLOW[idx - 1] : null;
   const missing = missingFor(card.stage, toGateCard(card));
   const check = checkMove(toGateCard(card), next);
   return (
@@ -393,8 +400,8 @@ function RunningSection({ card, lists }: SectionProps) {
   const allEvidence = card.runs.flatMap((r) => r.evidence.map((e) => ({ ...e, runName: r.name })));
   return (
     <div>
-      <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">Runs</h4>
-      {card.runs.length === 0 && <p className="mb-2 text-sm text-muted">No runs linked yet.</p>}
+      <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">Sessions</h4>
+      {card.runs.length === 0 && <p className="mb-2 text-sm text-muted">No sessions linked yet. A session is one time you collected data, like an event night or a day of interviews.</p>}
       {card.runs.map((r) => (
         <div key={r.id} className="mb-1 flex items-center gap-2 text-sm">
           <span className="flex-1">
@@ -410,7 +417,7 @@ function RunningSection({ card, lists }: SectionProps) {
         </div>
       ))}
       <div className="mt-2 grid grid-cols-2 gap-2">
-        <Label text="Link an existing run">
+        <Label text="Link an existing session">
           <select className={inputCls} value="" onChange={(e) => e.target.value && run(() => A.linkRun(card.id, e.target.value))}>
             <option value="">Choose...</option>
             {lists.runs
@@ -429,8 +436,8 @@ function RunningSection({ card, lists }: SectionProps) {
             run(() => A.createRun(card.id, newRun), (r) => r.ok && setNewRun({ name: "", date: "" }));
           }}
         >
-          <span className="mb-1 block text-xs font-medium text-muted">Or add a new run</span>
-          <input className={inputCls} placeholder="Run name" value={newRun.name} onChange={(e) => setNewRun({ ...newRun, name: e.target.value })} />
+          <span className="mb-1 block text-xs font-medium text-muted">Or add a new session</span>
+          <input className={inputCls} placeholder="Session name" value={newRun.name} onChange={(e) => setNewRun({ ...newRun, name: e.target.value })} />
           <div className="mt-1 flex gap-1">
             <input className={inputCls} type="date" value={newRun.date} onChange={(e) => setNewRun({ ...newRun, date: e.target.value })} />
             <Button type="submit" disabled={pending || !newRun.name.trim()}>
