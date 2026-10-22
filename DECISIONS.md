@@ -61,4 +61,5 @@ Choices made during the build that the brief didn't spell out.
 - **Seeded tag:** one notice on the board instead of a tag per row; the tag and a "Mark reviewed" button (clears it) are in the panel.
 - **Panel:** new assumption, add session, add evidence, and record a reading open from "+" buttons. The checklist shows only what is missing and the main button; "Move back" is in a small menu.
 - Not done (Adam passed on it): collapsing the toolbar into one "New experiment" button.
+- **Reverted the type grouping (same day).** Adam didn't like active and finished cycles mixed together. Active experiments are rows again (past report date first, then furthest along); finished ones sit in a separate "Show finished experiments" section as slim lines, newest first, each with "Start next cycle". The other simplifications stay.
 

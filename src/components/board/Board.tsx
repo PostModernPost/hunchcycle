@@ -1,8 +1,8 @@
 "use client";
-// The board: one row per experiment, grouped by type so its cycles read 1, 2, 3. A row fills in
-// left to right as the experiment moves through the chain (BRIEF section 4). Drag the current step
-// into a later column to expand the row (gated), or into an earlier one to move it back. Finished
-// cycles show as slim lines. Click any step to open the drawer there.
+// The board: one row per active experiment. A row fills in left to right as the experiment moves
+// through the chain (BRIEF section 4). Drag the current step into a later column to expand the row
+// (gated), or into an earlier one to move it back. Click any step to open the drawer there.
+// Finished experiments are listed separately underneath as slim lines.
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { DndContext, DragOverlay, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import type { BoardCard } from "@/lib/board-data";
@@ -22,7 +22,6 @@ export const stageColor = (s: Stage) => `var(--color-stage-${s === "closed" ? "d
 
 type Props = { cards: BoardCard[]; lists: Lists; initialOpen?: string };
 type Opener = (id: string | null, focus?: Stage) => void;
-type Group = { key: string; name: string; cards: BoardCard[] };
 
 export function Board(props: Props) {
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -54,7 +53,7 @@ function BoardInner({ cards, lists, initialOpen }: Props) {
   const [moved, setMoved] = useState<Record<string, Stage>>({}); // optimistic stage while a move saves
   const [dragId, setDragId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [hideFinished, setHideFinished] = useState(false);
+  const [showFinished, setShowFinished] = useState(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const now = useMemo(() => new Date(), []);
 
@@ -70,10 +69,16 @@ function BoardInner({ cards, lists, initialOpen }: Props) {
   const q = query.trim().toLowerCase();
   const visible = cards
     .map((c) => ({ ...c, stage: moved[c.id] ?? c.stage }))
-    .filter((c) => !q || `${experimentName(c)} ${c.title ?? ""}`.toLowerCase().includes(q))
-    .filter((c) => !hideFinished || c.stage !== "closed");
-  const groups = groupByType(visible, now);
-  const running = visible.filter((c) => c.stage === "running").length;
+    .filter((c) => !q || `${experimentName(c)} ${c.title ?? ""}`.toLowerCase().includes(q));
+  // past report date first, then furthest along
+  const active = visible
+    .filter((c) => c.stage !== "closed")
+    .sort((a, b) => Number(isStale(b, now)) - Number(isStale(a, now)) || STAGE_INDEX[b.stage] - STAGE_INDEX[a.stage]);
+  // most recently finished first
+  const finished = visible
+    .filter((c) => c.stage === "closed")
+    .sort((a, b) => +new Date(b.closedAt ?? b.updatedAt) - +new Date(a.closedAt ?? a.updatedAt));
+  const running = active.filter((c) => c.stage === "running").length;
   const toReview = cards.filter((c) => c.tags.includes(SEED_TAG)).length;
   const openCard = cards.find((c) => c.id === openState?.id) ?? null;
   const dragCard = visible.find((c) => c.id === dragId) ?? null;
@@ -115,11 +120,11 @@ function BoardInner({ cards, lists, initialOpen }: Props) {
       {/* A fixed id keeps dnd-kit's generated ids the same on the server and in the browser. */}
       <DndContext id="board" sensors={sensors} onDragStart={(e) => setDragId(String(e.active.id))} onDragCancel={() => setDragId(null)} onDragEnd={onDragEnd}>
         <div className="-mx-4 overflow-x-auto px-4 pb-4">
-          <div className="grid min-w-max gap-y-1.5" style={GRID}>
+          <div className="grid min-w-max gap-y-2" style={GRID}>
             <HeaderRow />
-            {groups.length === 0 && <div className="col-span-full py-6 text-sm text-muted">No experiments match.</div>}
-            {groups.map((g) => (
-              <TypeGroup key={g.key} group={g} now={now} dragId={dragId} onOpen={open} />
+            {active.length === 0 && <div className="col-span-full py-6 text-sm text-muted">No experiments match.</div>}
+            {active.map((c) => (
+              <Row key={c.id} card={c} now={now} dragging={dragId === c.id} onOpen={open} />
             ))}
           </div>
         </div>
@@ -132,9 +137,20 @@ function BoardInner({ cards, lists, initialOpen }: Props) {
         </DragOverlay>
       </DndContext>
 
-      <button className="mt-2 text-sm text-muted hover:text-ink" onClick={() => setHideFinished(!hideFinished)}>
-        {hideFinished ? "Show finished cycles" : "Hide finished cycles"}
-      </button>
+      <div className="mt-4">
+        <button className="text-sm text-muted hover:text-ink" onClick={() => setShowFinished(!showFinished)}>
+          {showFinished ? "Hide" : "Show"} finished experiments ({finished.length})
+        </button>
+        {showFinished && (
+          <div className="-mx-4 mt-2 overflow-x-auto px-4 pb-4">
+            <div className="grid min-w-max gap-y-1.5" style={GRID}>
+              {finished.map((c) => (
+                <FinishedRow key={c.id} card={c} onOpen={open} />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
 
       {openCard && (
         <Drawer
@@ -146,38 +162,6 @@ function BoardInner({ cards, lists, initialOpen }: Props) {
           onClose={() => open(null)}
           onOpen={open}
         />
-      )}
-    </>
-  );
-}
-
-/**
- * One group per type, cycles in number order. Groups with something past its report date come
- * first, then groups with active cycles, then groups with only finished cycles.
- */
-function groupByType(cards: BoardCard[], now: Date): Group[] {
-  const map = new Map<string, Group>();
-  for (const c of cards) {
-    const key = c.typeId ?? "none";
-    if (!map.has(key)) map.set(key, { key, name: c.type?.name ?? "No type", cards: [] });
-    map.get(key)!.cards.push(c);
-  }
-  const rank = (g: Group) => (g.cards.some((c) => isStale(c, now)) ? 0 : g.cards.some((c) => c.stage !== "closed") ? 1 : 2);
-  for (const g of map.values()) g.cards.sort((a, b) => (a.cycleNumber ?? 0) - (b.cycleNumber ?? 0));
-  return [...map.values()].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
-}
-
-function TypeGroup({ group, now, dragId, onOpen }: { group: Group; now: Date; dragId: string | null; onOpen: Opener }) {
-  const last = group.cards[group.cards.length - 1];
-  return (
-    <>
-      <div className="sticky left-0 col-span-full mt-3 text-xs font-semibold uppercase tracking-wide text-muted">{group.name}</div>
-      {group.cards.map((c) =>
-        c.stage === "closed" ? (
-          <FinishedRow key={c.id} card={c} onOpen={onOpen} offerNext={c.id === last.id} />
-        ) : (
-          <Row key={c.id} card={c} now={now} dragging={dragId === c.id} onOpen={onOpen} />
-        ),
       )}
     </>
   );
@@ -279,8 +263,8 @@ function Row({ card: c, now, dragging, onOpen }: { card: BoardCard; now: Date; d
   );
 }
 
-/** A finished cycle: one slim line with its decision, so earlier cycles stay in view without taking space. */
-function FinishedRow({ card: c, onOpen, offerNext }: { card: BoardCard; onOpen: Opener; offerNext: boolean }) {
+/** A finished experiment: one slim line with its decision and a way to start the next cycle. */
+function FinishedRow({ card: c, onOpen }: { card: BoardCard; onOpen: Opener }) {
   const { run, pending } = useAction();
   return (
     <>
@@ -296,13 +280,11 @@ function FinishedRow({ card: c, onOpen, offerNext }: { card: BoardCard; onOpen: 
         <span className="text-muted">Finished {fmtDate(c.closedAt)}</span>
         {c.decision && <span className="font-semibold capitalize">{c.decision}</span>}
         {c.decisionNote && <span className="line-clamp-1 flex-1 text-muted">{c.decisionNote}</span>}
-        {offerNext && (
-          <span className="ml-auto" onClick={(e) => e.stopPropagation()}>
-            <Button kind="quiet" disabled={pending} onClick={() => run(() => createNextExperiment(c.id), (r) => r.ok && r.id && onOpen(r.id))}>
-              Start next cycle
-            </Button>
-          </span>
-        )}
+        <span className="ml-auto" onClick={(e) => e.stopPropagation()}>
+          <Button kind="quiet" disabled={pending} onClick={() => run(() => createNextExperiment(c.id), (r) => r.ok && r.id && onOpen(r.id))}>
+            Start next cycle
+          </Button>
+        </span>
       </div>
     </>
   );
