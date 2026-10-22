@@ -8,6 +8,7 @@ import { checkMove, filled, FLOW, missingFor, toGateCard, type Stage } from "@/l
 import { experimentName, fmtDate, pct, STAGE_LABELS, STATUS_STYLES } from "@/lib/format";
 import { Pill, SeedFlag } from "@/components/ui";
 import * as A from "@/app/actions";
+import { createFromResults } from "@/app/assumptions/actions";
 import { Button, dateInput, inputCls, Label, Reveal, SelectInput, TextInput, useAction } from "./fields";
 import { TypePicker, type ExperimentType } from "./TypePicker";
 
@@ -172,7 +173,8 @@ function GateBox({ card, onOpen }: { card: BoardCard; onOpen: (id: string) => vo
   if (card.stage === "closed") {
     return (
       <div className="mb-4 rounded-lg border border-line bg-white p-3 text-sm">
-        This sprint is closed{card.closedAt ? ` (${fmtDate(card.closedAt)})` : ""}. It stays searchable.
+        This sprint is closed{card.closedAt ? ` (${fmtDate(card.closedAt)})` : ""}. It stays searchable, and each assumption&apos;s history links back to it.
+        <NextSprintPreview card={card} />
         <div className="mt-2 flex flex-wrap gap-2">
           <Button
             kind="primary"
@@ -241,6 +243,26 @@ function GateBox({ card, onOpen }: { card: BoardCard; onOpen: (id: string) => vo
   );
 }
 
+/** What "Start next sprint" will prefill: the same assumptions plus any that came out of the results. */
+function NextSprintPreview({ card }: { card: BoardCard }) {
+  const spawnedIds = new Set(card.spawned.map((a) => a.id));
+  const all = [...card.assumptions.filter((a) => !spawnedIds.has(a.id)), ...card.spawned];
+  if (!all.length) return null;
+  return (
+    <div className="mt-2">
+      <div className="text-xs text-muted">The next sprint will start with:</div>
+      <ul className="mt-1 list-disc pl-5 text-xs">
+        {all.map((a) => (
+          <li key={a.id}>
+            {a.statement}
+            {spawnedIds.has(a.id) && <span className="text-accent"> (new, from these results)</span>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 type SectionProps = { card: BoardCard; lists: Lists; save: (field: string) => (v: string) => void };
 
 // ---------- Assumption ----------
@@ -255,7 +277,9 @@ function AssumptionSection({ card, lists }: SectionProps) {
       {card.assumptions.map((a) => (
         <div key={a.id} className="mb-2 flex items-start gap-2 text-sm">
           <Pill className={STATUS_STYLES[a.status]}>{a.status}</Pill>
-          <span className="flex-1">{a.statement}</span>
+          <Link href={`/assumptions/${a.id}`} className="flex-1 hover:underline">
+            {a.statement}
+          </Link>
           <button className="text-xs text-muted hover:text-red-700" onClick={() => run(() => A.unlinkAssumption(card.id, a.id))}>
             Remove
           </button>
@@ -744,6 +768,87 @@ function ResultsSection({ card, save }: SectionProps) {
         disabled={!filled(card.rawLearnings)}
         placeholder={filled(card.rawLearnings) ? "" : "Write the raw learnings first"}
       />
+      <NewAssumptionsFromResults card={card} />
+    </div>
+  );
+}
+
+/** Results often raise new hunches. Assumptions written here carry into the next sprint. */
+function NewAssumptionsFromResults({ card }: { card: BoardCard }) {
+  const { run, pending } = useAction();
+  const blank = { statement: "", category: "other", importance: 3, evidence: 1, parentId: "" };
+  const [v, setV] = useState(blank);
+  return (
+    <div className="mt-2">
+      <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">New assumptions from these results</h4>
+      {card.spawned.length === 0 && <p className="text-xs text-muted">None yet. Anything you add here starts the next sprint along with the current assumptions.</p>}
+      <ul className="mb-1 space-y-1 text-sm">
+        {card.spawned.map((a) => (
+          <li key={a.id}>
+            <Link href={`/assumptions/${a.id}`} className="hover:underline">
+              {a.statement}
+            </Link>
+          </li>
+        ))}
+      </ul>
+      <Reveal label="New assumption from these results">
+        {(close) => (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              run(
+                () => createFromResults(card.id, v),
+                (r) => {
+                  if (r.ok) {
+                    setV(blank);
+                    close();
+                  }
+                },
+              );
+            }}
+          >
+            <textarea className={inputCls} rows={2} placeholder="We now believe that..." value={v.statement} onChange={(e) => setV({ ...v, statement: e.target.value })} />
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              <Label text="Category">
+                <select className={inputCls} value={v.category} onChange={(e) => setV({ ...v, category: e.target.value })}>
+                  {CATEGORIES.map((c) => (
+                    <option key={c}>{c}</option>
+                  ))}
+                </select>
+              </Label>
+              <Label text="Importance (1 to 5)">
+                <select className={inputCls} value={v.importance} onChange={(e) => setV({ ...v, importance: Number(e.target.value) })}>
+                  {SCORES.map((o) => (
+                    <option key={o.value}>{o.value}</option>
+                  ))}
+                </select>
+              </Label>
+              <Label text="Evidence (1 to 5)">
+                <select className={inputCls} value={v.evidence} onChange={(e) => setV({ ...v, evidence: Number(e.target.value) })}>
+                  {SCORES.map((o) => (
+                    <option key={o.value}>{o.value}</option>
+                  ))}
+                </select>
+              </Label>
+            </div>
+            {card.assumptions.length > 0 && (
+              <Label text="Grew out of (optional)">
+                <select className={inputCls} value={v.parentId} onChange={(e) => setV({ ...v, parentId: e.target.value })}>
+                  <option value="">None</option>
+                  {card.assumptions.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.statement.length > 80 ? a.statement.slice(0, 80) + "..." : a.statement}
+                    </option>
+                  ))}
+                </select>
+              </Label>
+            )}
+            <Button type="submit" disabled={pending || !v.statement.trim()}>
+              Add assumption
+            </Button>
+          </form>
+        )}
+      </Reveal>
     </div>
   );
 }

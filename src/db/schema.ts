@@ -1,6 +1,7 @@
 // Hunchcycle data model. See BRIEF.md section 3.
 import { relations, sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   boolean,
   doublePrecision,
   integer,
@@ -86,6 +87,8 @@ export const assumptions = pgTable("assumptions", {
   notes: text("notes"),
   tags: textArray("tags"),
   parentId: text("parent_id"),
+  // set when the assumption came out of a sprint's results; the next sprint starts with it (BRIEF section 4, loop back)
+  spawnedByExperimentId: text("spawned_by_experiment_id").references((): AnyPgColumn => experiments.id, { onDelete: "set null" }),
   createdAt: created(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -387,9 +390,12 @@ export const openQuestions = pgTable("open_questions", {
 
 // ---------- Relations (for relational queries) ----------
 
-export const assumptionsRelations = relations(assumptions, ({ many }) => ({
+export const assumptionsRelations = relations(assumptions, ({ many, one }) => ({
   experiments: many(experimentAssumptions),
   history: many(assumptionHistory),
+  parent: one(assumptions, { fields: [assumptions.parentId], references: [assumptions.id], relationName: "parent" }),
+  children: many(assumptions, { relationName: "parent" }),
+  spawnedBy: one(experiments, { fields: [assumptions.spawnedByExperimentId], references: [experiments.id], relationName: "spawned" }),
 }));
 export const assumptionHistoryRelations = relations(assumptionHistory, ({ one }) => ({
   assumption: one(assumptions, { fields: [assumptionHistory.assumptionId], references: [assumptions.id] }),
@@ -400,6 +406,7 @@ export const experimentTypesRelations = relations(experimentTypes, ({ many }) =>
 }));
 export const experimentsRelations = relations(experiments, ({ many, one }) => ({
   type: one(experimentTypes, { fields: [experiments.typeId], references: [experimentTypes.id] }),
+  spawned: many(assumptions, { relationName: "spawned" }),
   assumptions: many(experimentAssumptions),
   metrics: many(metrics),
   runs: many(experimentRuns),

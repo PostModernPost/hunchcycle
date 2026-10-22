@@ -8,6 +8,7 @@ async function query(id?: string) {
     where: id ? eq(s.experiments.id, id) : undefined,
     with: {
       type: true,
+      spawned: true, // assumptions that came out of this sprint's results
       assumptions: { with: { assumption: true } },
       metrics: {
         with: {

@@ -646,6 +646,9 @@ async function main() {
     [a6.id],
   );
 
+  // seeded history entries are dated when their sprint closed, not when the import ran
+  await db.execute(sql`UPDATE assumption_history h SET created_at = e.closed_at FROM experiments e WHERE h.experiment_id = e.id AND e.closed_at IS NOT NULL`);
+
   // ---- open questions + coach comment ----
   if (newQuestions.length) await db.insert(s.openQuestions).values(newQuestions.map((text) => ({ text })));
   await db.insert(s.comments).values({

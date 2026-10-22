@@ -15,6 +15,13 @@
       "when": 1792710057863,
       "tag": "0001_experiment_types",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792712657165,
+      "tag": "0002_spawned_assumptions",
+      "breakpoints": true
     }
   ]
 }

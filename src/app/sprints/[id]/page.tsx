@@ -39,7 +39,7 @@ export default async function SprintDetail({ params }: { params: Promise<{ id: s
 
       <Section title="Assumptions tested">
         {e.assumptions.map(({ assumption: a }) => (
-          <Link key={a.id} href={`/assumptions#${a.id}`} className="mb-2 flex items-start gap-2 text-sm hover:underline">
+          <Link key={a.id} href={`/assumptions/${a.id}`} className="mb-2 flex items-start gap-2 text-sm hover:underline">
             <Pill className={STATUS_STYLES[a.status]}>{a.status}</Pill>
             <span>{a.statement}</span>
           </Link>

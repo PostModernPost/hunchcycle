@@ -81,3 +81,12 @@ Choices made during the build that the brief didn't spell out.
 - **Shared helpers:** `src/lib/parse.ts` (form value parsing, `Result`), `src/components/styles.ts` (`inputCls`, usable from server pages), and `dateInput` moved to `src/lib/format.ts`. Action errors show through one app-wide `Toaster` in the layout.
 - **Seed fix:** spreadsheet hyperlink cells whose text is rich text were imported as "[object Object]" (Darby's contact, and one survey respondent's name and email). `cellText` now handles them, and the two records were repaired in place from the spreadsheet.
 
+## Milestone 4
+
+- **Assumption map is plain SVG**, no chart library. Evidence runs left to right, importance bottom to top, split at 3. Only the top-left quadrant is highlighted ("Test next"); the other three get small muted labels. Dots are numbered in riskiest-first order (importance minus evidence, then importance) and colored by status; dots on the same spot are spread in a ring. Map is the default view, list is `?view=list`.
+- **New assumptions from results** are stored with `spawned_by_experiment_id` (migration 0002) and a history entry "Came out of this sprint's results". They are not linked to that sprint; "Start next sprint" links them to the next one along with the sprint's own assumptions. An optional "Grew out of" sets `parent_id`.
+- **Changing evidence or status by hand** on an assumption's page writes a history entry with no sprint ("changed by hand"). Decision updates stay the normal path.
+- **History is written when each assumption is updated in Decision**, and closing requires every linked assumption to have one (from milestone 2). The closed panel lists what the next sprint will start with.
+- **Seeded history entries** are dated when their sprint closed instead of when the import ran (fixed in the seed and in the database).
+- **Done-means check** ("closing the Game Day Pilot updates assumptions 1, 4, 5 and offers a prefilled next sprint") was run on a throwaway copy linked to the same three assumptions, because the real Game Day Pilot never launched. All values were restored afterward.
+

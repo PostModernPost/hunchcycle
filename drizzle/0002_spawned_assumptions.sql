@@ -1,0 +1,2 @@
+ALTER TABLE "assumptions" ADD COLUMN "spawned_by_experiment_id" text;--> statement-breakpoint
+ALTER TABLE "assumptions" ADD CONSTRAINT "assumptions_spawned_by_experiment_id_experiments_id_fk" FOREIGN KEY ("spawned_by_experiment_id") REFERENCES "public"."experiments"("id") ON DELETE set null ON UPDATE no action;

@@ -124,7 +124,10 @@ export async function splitCard(id: string): Promise<Result> {
   return done(copy.id);
 }
 
-/** Loop back: a closed experiment starts the next cycle of its type in Assumption, with the same assumptions. */
+/**
+ * Loop back (BRIEF section 4): a closed sprint starts the next one of its type in Assumption,
+ * prefilled with the same assumptions plus any new ones that came out of its results.
+ */
 export async function createNextExperiment(id: string): Promise<Result> {
   const card = await loadCard(id);
   if (!card) return { ok: false, error: "Sprint not found." };
@@ -138,8 +141,8 @@ export async function createNextExperiment(id: string): Promise<Result> {
       stage: "assumption",
     })
     .returning();
-  if (card.assumptions.length)
-    await db.insert(s.experimentAssumptions).values(card.assumptions.map((a) => ({ experimentId: next.id, assumptionId: a.id })));
+  const ids = [...new Set([...card.assumptions, ...card.spawned].map((a) => a.id))];
+  if (ids.length) await db.insert(s.experimentAssumptions).values(ids.map((assumptionId) => ({ experimentId: next.id, assumptionId })));
   return done(next.id);
 }
 
