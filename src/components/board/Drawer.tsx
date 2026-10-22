@@ -612,16 +612,46 @@ function RunningSection({ card, lists }: SectionProps) {
 function Readings({ metric: m }: { metric: Metric }) {
   if (m.readings.length === 0) return <p className="text-xs text-muted">No readings yet.</p>;
   return (
-    <ul className="space-y-0.5 text-sm">
+    <ul className="space-y-1 text-sm">
       {m.readings.map((r) => (
-        <li key={r.id}>
-          {r.numerator != null && r.denominator != null ? `${r.numerator} of ${r.denominator} (${pct(r.numerator, r.denominator)})` : r.value}
-          <span className="text-xs text-muted"> on {fmtDate(r.date)}</span>
-          {!r.verified && <Pill className="ml-2 bg-yellow-100 text-yellow-800">unverified</Pill>}
-          {r.note && <span className="ml-2 text-xs text-muted">{r.note}</span>}
-        </li>
+        <ReadingRow key={r.id} reading={r} />
       ))}
     </ul>
+  );
+}
+
+/** A reading, which opens to show the evidence and people behind it (BRIEF section 5). */
+function ReadingRow({ reading: r }: { reading: Metric["readings"][number] }) {
+  const [open, setOpen] = useState(false);
+  const linked = r.evidence.map((x) => x.evidence);
+  return (
+    <li>
+      <button className="text-left hover:underline" onClick={() => setOpen(!open)} aria-expanded={open}>
+        {r.numerator != null && r.denominator != null ? `${r.numerator} of ${r.denominator} (${pct(r.numerator, r.denominator)})` : r.value}
+        <span className="text-xs text-muted"> on {fmtDate(r.date)}</span>
+      </button>
+      {!r.verified && <Pill className="ml-2 bg-yellow-100 text-yellow-800">unverified</Pill>}
+      {r.note && <span className="ml-2 text-xs text-muted">{r.note}</span>}
+      {open && (
+        <div className="ml-3 mt-1 border-l border-line pl-3 text-xs">
+          {linked.length === 0 && (
+            <p className="text-muted">{r.verified ? "Marked verified, but no evidence is linked yet." : "No evidence linked, so this reading is unverified."}</p>
+          )}
+          {linked.map((e) => (
+            <p key={e.id} className="mb-1">
+              <span className="text-muted">{e.run.name}: </span>
+              {e.interview ? (
+                <Link href={`/interviews/${e.interview.id}`} className="underline">
+                  {e.interview.person.name}
+                </Link>
+              ) : (
+                <span className="line-clamp-2 inline">{e.summary}</span>
+              )}
+            </p>
+          ))}
+        </div>
+      )}
+    </li>
   );
 }
 

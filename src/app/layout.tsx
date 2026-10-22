@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import "./globals.css";
+import { Toaster } from "@/components/Toaster";
 
 export const metadata: Metadata = {
   title: "Hunchcycle",
@@ -33,7 +34,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             </nav>
           </div>
         </header>
-        <main className="mx-auto max-w-[1800px] px-4 py-6">{children}</main>
+        <main className="mx-auto max-w-[1800px] px-4 py-6">
+          <Toaster>{children}</Toaster>
+        </main>
       </body>
     </html>
   );

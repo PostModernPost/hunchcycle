@@ -413,9 +413,19 @@ export const experimentAssumptionsRelations = relations(experimentAssumptions, (
 export const metricsRelations = relations(metrics, ({ one, many }) => ({
   experiment: one(experiments, { fields: [metrics.experimentId], references: [experiments.id] }),
   readings: many(metricReadings),
+  evidence: many(evidenceMetrics),
 }));
-export const metricReadingsRelations = relations(metricReadings, ({ one }) => ({
+export const metricReadingsRelations = relations(metricReadings, ({ one, many }) => ({
   metric: one(metrics, { fields: [metricReadings.metricId], references: [metrics.id] }),
+  evidence: many(readingEvidence),
+}));
+export const readingEvidenceRelations = relations(readingEvidence, ({ one }) => ({
+  reading: one(metricReadings, { fields: [readingEvidence.readingId], references: [metricReadings.id] }),
+  evidence: one(evidence, { fields: [readingEvidence.evidenceId], references: [evidence.id] }),
+}));
+export const evidenceMetricsRelations = relations(evidenceMetrics, ({ one }) => ({
+  evidence: one(evidence, { fields: [evidenceMetrics.evidenceId], references: [evidence.id] }),
+  metric: one(metrics, { fields: [evidenceMetrics.metricId], references: [metrics.id] }),
 }));
 export const runsRelations = relations(runs, ({ many }) => ({
   experiments: many(experimentRuns),
@@ -425,9 +435,11 @@ export const experimentRunsRelations = relations(experimentRuns, ({ one }) => ({
   experiment: one(experiments, { fields: [experimentRuns.experimentId], references: [experiments.id] }),
   run: one(runs, { fields: [experimentRuns.runId], references: [runs.id] }),
 }));
-export const evidenceRelations = relations(evidence, ({ one }) => ({
+export const evidenceRelations = relations(evidence, ({ one, many }) => ({
   run: one(runs, { fields: [evidence.runId], references: [runs.id] }),
   interview: one(interviews, { fields: [evidence.id], references: [interviews.evidenceId] }),
+  metrics: many(evidenceMetrics),
+  readings: many(readingEvidence),
 }));
 export const peopleRelations = relations(people, ({ many }) => ({
   interviews: many(interviews),

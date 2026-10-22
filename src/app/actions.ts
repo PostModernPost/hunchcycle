@@ -6,20 +6,11 @@ import { db, schema as s } from "@/db";
 import { loadCard } from "@/lib/board-data";
 import { blockedMessage, checkMove, toGateCard, type Stage } from "@/lib/gates";
 
-type Result = { ok: true; id?: string } | { ok: false; error: string };
+import { clamp, toDate, toInt, toText, type Result } from "@/lib/parse";
 
 const done = (id?: string): Result => {
-  revalidatePath("/");
-  revalidatePath("/sprints/[id]", "page");
+  revalidatePath("/", "layout");
   return { ok: true, id };
-};
-
-// "2026-10-29" from a date input, stored at noon Pacific like the seed.
-const toDate = (v: unknown) => (typeof v === "string" && v ? new Date(`${v}T12:00:00-07:00`) : null);
-const toText = (v: unknown) => (typeof v === "string" && v.trim() ? v : null);
-const toInt = (v: unknown) => {
-  const n = typeof v === "number" ? v : parseInt(String(v ?? ""), 10);
-  return Number.isFinite(n) ? n : null;
 };
 
 // ---------- Cards ----------
@@ -301,8 +292,4 @@ export async function addEvidence(runId: string, v: { type: string; summary: str
   const type = s.evidenceType.enumValues.includes(v.type as never) ? (v.type as "observation") : "observation";
   await db.insert(s.evidence).values({ runId, type, summary: v.summary.trim() });
   return done();
-}
-
-function clamp(n: number, lo: number, hi: number) {
-  return Math.min(hi, Math.max(lo, Math.round(Number(n) || lo)));
 }

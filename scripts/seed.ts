@@ -22,7 +22,8 @@ function cellText(v: ExcelJS.CellValue): string | null {
   if (v instanceof Date) return v.toISOString();
   if (typeof v === "object") {
     if ("richText" in v) return v.richText.map((r) => r.text).join("").trim() || null;
-    if ("text" in v) return String(v.text).trim() || null;
+    // hyperlink cells: the text can itself be rich text
+    if ("text" in v) return typeof v.text === "object" ? cellText(v.text as ExcelJS.CellValue) : String(v.text).trim() || null;
     if ("result" in v) return v.result == null ? null : String(v.result).trim() || null;
     return null;
   }

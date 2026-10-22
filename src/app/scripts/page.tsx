@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { db } from "@/db";
 import { Card, PageTitle, Pill } from "@/components/ui";
+import { NewBankQuestion, NewScript } from "@/components/scripts/ScriptEditor";
 
 export const dynamic = "force-dynamic";
 
 export default async function ScriptsPage() {
   const scripts = await db.query.scripts.findMany({
-    with: { questions: { with: { question: true } }, interviews: true },
+    with: { questions: { with: { question: true } }, interviews: { columns: { id: true } } },
+    orderBy: (x, { asc }) => [asc(x.name), asc(x.createdAt)],
   });
   const bank = await db.query.questions.findMany({
     with: { scriptQuestions: { with: { script: true } }, answers: true },
@@ -15,14 +17,19 @@ export default async function ScriptsPage() {
   return (
     <div className="max-w-4xl">
       <PageTitle title="Scripts and question bank" sub="Scripts are versioned lists of questions from one shared bank, so answers stay comparable across versions." />
+      <div className="mb-4">
+        <NewScript />
+      </div>
       <div className="grid gap-4 sm:grid-cols-2">
         {scripts.map((sc) => (
           <Card key={sc.id}>
             <div className="flex items-center justify-between">
-              <div className="font-medium">
+              <Link href={`/scripts/${sc.id}`} className="font-medium hover:underline">
                 {sc.name} <span className="text-muted">{sc.versionLabel}</span>
-              </div>
-              <span className="text-xs text-muted">{sc.interviews.length} uses</span>
+              </Link>
+              <span className="text-xs text-muted">
+                {sc.interviews.length} interview{sc.interviews.length === 1 ? "" : "s"}
+              </span>
             </div>
             <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm">
               {sc.questions
@@ -40,6 +47,9 @@ export default async function ScriptsPage() {
       </div>
 
       <h2 className="mb-2 mt-8 text-sm font-semibold uppercase tracking-wide text-muted">Question bank</h2>
+      <div className="mb-2">
+        <NewBankQuestion />
+      </div>
       <Card>
         <ul className="divide-y divide-line text-sm">
           {bank.map((q) => {

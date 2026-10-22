@@ -9,7 +9,16 @@ async function query(id?: string) {
     with: {
       type: true,
       assumptions: { with: { assumption: true } },
-      metrics: { with: { readings: { orderBy: (r, { asc }) => [asc(r.date)] } }, orderBy: (m, { asc }) => [asc(m.order)] },
+      metrics: {
+        with: {
+          readings: {
+            orderBy: (r, { asc }) => [asc(r.date)],
+            // the evidence (and people) behind each reading, so it can be checked
+            with: { evidence: { with: { evidence: { with: { run: true, interview: { with: { person: true } } } } } } },
+          },
+        },
+        orderBy: (m, { asc }) => [asc(m.order)],
+      },
       runs: { with: { run: { with: { evidence: true } } } },
       comments: { orderBy: (c, { asc }) => [asc(c.createdAt)] },
     },

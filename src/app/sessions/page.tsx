@@ -1,68 +1,45 @@
-import Link from "next/link";
 import { db } from "@/db";
-import { Card, PageTitle, Pill } from "@/components/ui";
-import { experimentName, fmtDate } from "@/lib/format";
+import { PageTitle } from "@/components/ui";
+import { NewSession, SessionCard, type SessionData } from "@/components/sessions/SessionCard";
+import { experimentName } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
 export default async function SessionsPage() {
-  const rows = await db.query.runs.findMany({
-    with: {
-      experiments: { with: { experiment: { with: { type: true } } } },
-      evidence: { with: { interview: { with: { person: true } } } },
-    },
-  });
-  rows.sort((a, b) => (a.startDate?.getTime() ?? Infinity) - (b.startDate?.getTime() ?? Infinity));
+  const [rows, sprints] = await Promise.all([
+    db.query.runs.findMany({
+      with: {
+        experiments: { with: { experiment: { with: { type: true, metrics: { orderBy: (m, { asc }) => [asc(m.order)] } } } } },
+        evidence: { with: { interview: { with: { person: true } }, metrics: true }, orderBy: (e, { asc }) => [asc(e.createdAt)] },
+      },
+    }),
+    db.query.experiments.findMany({ with: { type: true }, orderBy: (e, { asc }) => [asc(e.createdAt)] }),
+  ]);
+  // newest first; sessions without a date go last
+  rows.sort((a, b) => (b.startDate?.getTime() ?? -Infinity) - (a.startDate?.getTime() ?? -Infinity));
+
+  const sessions: SessionData[] = rows.map(({ experiments, evidence, ...r }) => ({
+    ...r,
+    sprints: experiments.map(({ experiment: e }) => ({ id: e.id, name: experimentName(e), metrics: e.metrics.map((m) => ({ id: m.id, name: m.name })) })),
+    evidence: evidence.map((e) => ({
+      id: e.id,
+      type: e.type,
+      summary: e.summary,
+      metricIds: e.metrics.map((m) => m.metricId),
+      interview: e.interview ? { id: e.interview.id, personName: e.interview.person.name } : null,
+    })),
+  }));
 
   return (
     <div className="max-w-4xl">
       <PageTitle title="Sessions" sub="Each time you went out and collected evidence, like an event night or a day of interviews. One session can serve several sprints." />
+      <div className="mb-4">
+        <NewSession />
+      </div>
       <div className="space-y-3">
-        {rows.map((r) => {
-          const interviews = r.evidence.filter((e) => e.interview);
-          const other = r.evidence.filter((e) => !e.interview);
-          return (
-            <Card key={r.id} className="scroll-mt-4">
-              <div id={r.id} className="flex flex-wrap items-baseline justify-between gap-2">
-                <div className="font-medium">{r.name}</div>
-                <div className="text-xs text-muted">
-                  {fmtDate(r.startDate)}
-                  {r.endDate && <> to {fmtDate(r.endDate)}</>}
-                  {r.location && <> · {r.location}</>}
-                </div>
-              </div>
-              {r.notes && <div className="mt-1 text-sm text-muted">{r.notes}</div>}
-              <div className="mt-2 flex flex-wrap gap-1">
-                {r.experiments.map(({ experiment: e }) => (
-                  <Link key={e.id} href={`/sprints/${e.id}`}>
-                    <Pill className="bg-orange-50 text-orange-900 hover:bg-orange-100">{experimentName(e)}</Pill>
-                  </Link>
-                ))}
-                {r.experiments.length > 1 && !r.interferenceChecked && (
-                  <Pill className="bg-yellow-100 text-yellow-800">serves {r.experiments.length} experiments: interference not checked</Pill>
-                )}
-              </div>
-              {interviews.length > 0 && (
-                <div className="mt-3 text-sm">
-                  <span className="text-muted">{interviews.length} interview{interviews.length === 1 ? "" : "s"}: </span>
-                  {interviews.map((e, i) => (
-                    <span key={e.id}>
-                      {i > 0 && ", "}
-                      <Link href={`/interviews/${e.interview!.id}`} className="hover:underline">
-                        {e.interview!.person.name}
-                      </Link>
-                    </span>
-                  ))}
-                </div>
-              )}
-              {other.map((e) => (
-                <div key={e.id} className="mt-2 line-clamp-3 whitespace-pre-wrap text-sm text-muted">
-                  <Pill>{e.type}</Pill> {e.summary}
-                </div>
-              ))}
-            </Card>
-          );
-        })}
+        {sessions.map((r) => (
+          <SessionCard key={r.id} session={r} allSprints={sprints.map((e) => ({ id: e.id, name: experimentName(e) }))} />
+        ))}
       </div>
     </div>
   );

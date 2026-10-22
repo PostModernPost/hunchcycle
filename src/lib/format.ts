@@ -46,3 +46,10 @@ export const HEAT_STYLES: Record<string, string> = {
   warm: "bg-amber-100 text-amber-800",
   hot: "bg-orange-100 text-orange-800",
 };
+
+/** Date as yyyy-mm-dd in Pacific time, for date inputs. */
+export function dateInput(d: Date | string | null | undefined): string {
+  if (!d) return "";
+  const date = typeof d === "string" ? new Date(d) : d;
+  return date.toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
+}

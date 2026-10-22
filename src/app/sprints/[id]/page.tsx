@@ -14,7 +14,10 @@ export default async function SprintDetail({ params }: { params: Promise<{ id: s
     with: {
       type: true,
       assumptions: { with: { assumption: true } },
-      metrics: { with: { readings: true }, orderBy: (m, { asc }) => [asc(m.order)] },
+      metrics: {
+        with: { readings: { with: { evidence: { with: { evidence: { with: { interview: { with: { person: true } } } } } } } } },
+        orderBy: (m, { asc }) => [asc(m.order)],
+      },
       runs: { with: { run: true } },
       script: true,
       comments: true,
@@ -87,6 +90,23 @@ export default async function SprintDetail({ params }: { params: Promise<{ id: s
                     {r.numerator != null && r.denominator != null ? `${r.numerator}/${r.denominator} (${pct(r.numerator, r.denominator)})` : r.value}
                     {!r.verified && <Pill className="ml-2 bg-yellow-100 text-yellow-800">unverified</Pill>}
                     {r.note && <span className="ml-2 text-muted">{r.note}</span>}
+                    {r.evidence.length > 0 && (
+                      <span className="ml-2 text-xs text-muted">
+                        from{" "}
+                        {r.evidence.map(({ evidence: e }, i) => (
+                          <span key={e.id}>
+                            {i > 0 && ", "}
+                            {e.interview ? (
+                              <Link href={`/interviews/${e.interview.id}`} className="underline">
+                                {e.interview.person.name}
+                              </Link>
+                            ) : (
+                              (e.summary ?? "evidence").slice(0, 60)
+                            )}
+                          </span>
+                        ))}
+                      </span>
+                    )}
                   </div>
                 ))}
               </div>

@@ -10,7 +10,9 @@ Adam Waitt (founder of Play Action) is building this to replace the Google Doc a
 
 - Milestone 1 is done: Drizzle schema (`src/db/schema.ts`), migrations (`drizzle/`), seed import (`scripts/seed.ts`), read-only list pages for experiments, assumptions, runs, people, interviews, scripts, and questions.
 - Milestone 2 is built, waiting for Adam to check it (2026-10-22): the board is the home page (`src/app/page.tsx`, `src/components/board/`), one row per experiment that expands left to right across six columns (Assumption, Hypothesis, Test (MVP), Running, Results, Decision). Rows are named by type and cycle number ("Customer Interviews 2"); finished experiments are listed separately underneath as slim lines. In the UI, experiments are called Sprints and runs are called Sessions (code and tables keep the BRIEF names). Drag and drop with dnd-kit, card drawer with progressive sections, "Create next experiment" on closed rows, stage gates (`src/lib/gates.ts`, enforced again in `src/app/actions.ts`), split from Hypothesis, WIP warning over 3 in Running, stale flag with stale cards sorted first, closed cards listed under the board and searchable.
-- Next after Adam signs off: Milestone 3 (BRIEF section 12).
+- Milestone 2 signed off by Adam (2026-10-22).
+- Milestone 3 is built, waiting for Adam to check it (2026-10-22): editable Sessions page with evidence, metric tags, and the interference check (`src/components/sessions/`); People list plus a page per person (`src/app/people/[id]`); interview form for new and existing interviews (`src/components/interviews/InterviewForm.tsx`, mapping stub in `src/lib/transcript-mapping.ts`); script editor with copy to new version, locked once a version has interviews (`src/app/scripts/[id]`); question page with script-version and segment filters; readings open to show the evidence and people behind them.
+- Next after Adam signs off: Milestone 4 (BRIEF section 12).
 - Stop after each milestone, summarize what was built, and wait for Adam to check it before starting the next.
 
 ## Open items to confirm with Adam

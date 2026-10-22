@@ -3,7 +3,7 @@
 // through the chain (BRIEF section 4). Drag the current step into a later column to expand the row
 // (gated), or into an earlier one to move it back. Click any step to open the drawer there.
 // Finished experiments are listed separately underneath as slim lines.
-import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useContext, useMemo, useState } from "react";
 import { DndContext, DragOverlay, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import type { BoardCard } from "@/lib/board-data";
 import { BOARD_STAGES, blockedMessage, checkMove, filled, isStale, missingFor, toGateCard, type Stage } from "@/lib/gates";
@@ -24,26 +24,7 @@ type Props = { cards: BoardCard[]; lists: Lists; initialOpen?: string };
 type Opener = (id: string | null, focus?: Stage) => void;
 
 export function Board(props: Props) {
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
-  const toast = useCallback((msg: string) => setToastMsg(msg), []);
-  useEffect(() => {
-    if (!toastMsg) return;
-    const t = setTimeout(() => setToastMsg(null), 7000);
-    return () => clearTimeout(t);
-  }, [toastMsg]);
-  return (
-    <ToastContext.Provider value={toast}>
-      <BoardInner {...props} />
-      {toastMsg && (
-        <div role="alert" className="fixed bottom-4 left-1/2 z-50 max-w-lg -translate-x-1/2 rounded-lg border border-line bg-raised px-4 py-3 text-sm shadow-lg">
-          {toastMsg}
-          <button className="ml-3 text-muted hover:text-ink" onClick={() => setToastMsg(null)}>
-            Dismiss
-          </button>
-        </div>
-      )}
-    </ToastContext.Provider>
-  );
+  return <BoardInner {...props} />;
 }
 
 function BoardInner({ cards, lists, initialOpen }: Props) {

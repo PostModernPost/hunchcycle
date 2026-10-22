@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { filled } from "@/lib/gates";
+import { inputCls } from "@/components/styles";
 
 type ActionResult = { ok: true; id?: string } | { ok: false; error: string };
 
@@ -26,8 +27,7 @@ export function useAction() {
   return { run, pending };
 }
 
-export const inputCls =
-  "w-full rounded-md border border-line bg-paper px-2 py-1.5 text-sm placeholder:text-stone-400 focus:border-accent focus:outline-none disabled:bg-stone-50 disabled:text-muted";
+export { inputCls };
 
 export function Label({ text, required, children }: { text: string; required?: boolean; children: React.ReactNode }) {
   return (
@@ -159,9 +159,4 @@ export function Reveal({ label, children }: { label: string; children: (close: (
   );
 }
 
-/** Date as yyyy-mm-dd in Pacific time, for date inputs. */
-export function dateInput(d: Date | string | null | undefined): string {
-  if (!d) return "";
-  const date = typeof d === "string" ? new Date(d) : d;
-  return date.toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
-}
+export { dateInput } from "@/lib/format";

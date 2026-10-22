@@ -2,6 +2,7 @@ import Link from "next/link";
 import { db } from "@/db";
 import { PageTitle, Pill } from "@/components/ui";
 import { fmtDate, HEAT_STYLES } from "@/lib/format";
+import { NewPerson, ScoreSummary } from "@/components/people/PersonForm";
 
 export const dynamic = "force-dynamic";
 
@@ -10,10 +11,15 @@ export default async function PeoplePage() {
     with: { interviews: { with: { script: true } } },
     orderBy: (p, { asc }) => [asc(p.createdAt)],
   });
+  const scored = rows.flatMap((p) => p.interviews).filter((i) => i.score != null);
 
   return (
     <div>
       <PageTitle title="People" sub="Each person is stored once. Their interviews and survey responses stack under them." />
+      <div className="mb-3">
+        <NewPerson />
+      </div>
+      <ScoreSummary asked={scored.filter((i) => i.scoreSource !== "guessed").map((i) => i.score!)} guessed={scored.filter((i) => i.scoreSource === "guessed").map((i) => i.score!)} />
       <div className="overflow-x-auto rounded-lg border border-line bg-white">
         <table className="w-full text-sm">
           <thead className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
@@ -32,7 +38,11 @@ export default async function PeoplePage() {
               const last = p.interviews[p.interviews.length - 1];
               return (
                 <tr key={p.id} className="border-b border-line last:border-0">
-                  <td className="px-3 py-2 font-medium">{p.name}</td>
+                  <td className="px-3 py-2 font-medium">
+                    <Link href={`/people/${p.id}`} className="hover:underline">
+                      {p.name}
+                    </Link>
+                  </td>
                   <td className="px-3 py-2">{p.age}</td>
                   <td className="px-3 py-2 text-muted">{p.channelFound}</td>
                   <td className="px-3 py-2">
@@ -54,7 +64,7 @@ export default async function PeoplePage() {
                     {last?.score != null && (
                       <span>
                         {last.score}
-                        {last.scoreSource === "guessed" && <Pill className="ml-1 bg-yellow-100 text-yellow-800">guessed</Pill>}
+                        {last.scoreSource === "guessed" && <Pill className="ml-1 bg-yellow-100 text-yellow-800">guessed, unverified</Pill>}
                       </span>
                     )}
                   </td>

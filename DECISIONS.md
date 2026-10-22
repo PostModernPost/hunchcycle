@@ -67,3 +67,17 @@ Choices made during the build that the brief didn't spell out.
 
 - **Experiments are called "sprints" everywhere in the UI**, at Adam's request (his coaching doc already says "Sprint 1", "Sprint 2"). Code, tables, and the BRIEF keep the word "experiment". Buttons read "Add sprint", "Start next sprint", "Close sprint"; the detail page moved to `/sprints/[id]` and `/experiments/[id]` redirects there.
 
+## Milestone 3
+
+- **A script version with interviews is locked.** Its questions can't be added, removed, reordered, or reworded; "Copy to a new version" makes the next version (v1 to v2, same name, `parentId` set) to change. This is what keeps old interviews intact. Name, version label, and notes stay editable.
+- **Wording overrides** are per script; the bank question keeps its identity, so the question page shows answers across every version. Editing a bank question's main wording keeps all answers attached.
+- **Interviews need a session** (an interview is evidence, and evidence belongs to one run). The form can also create the person on the spot. Saving keeps the evidence row's summary in step (first of problem, observation, insights, summary) so the Sessions page shows something useful.
+- **Answers to questions outside the chosen script are kept** and listed as "Other answers on record" on the interview.
+- **Typing an answer marks it "Asked"** if it was "Not recorded".
+- **"Fill from transcript (coming later)"** is disabled; `mapTranscriptToAnswers` in `src/lib/transcript-mapping.ts` is the one place to swap in an AI call.
+- **Guessed scores** are shown as "guessed, unverified" and left out of the People page average unless the box is ticked.
+- **Sessions are listed newest first**; undated ones last. Interviews are edited on their own page, not from the Sessions page; plain evidence can be edited or deleted there.
+- **Readings** open to show their linked evidence (session, and the person for interviews). Seeded readings marked verified with no linked evidence say so.
+- **Shared helpers:** `src/lib/parse.ts` (form value parsing, `Result`), `src/components/styles.ts` (`inputCls`, usable from server pages), and `dateInput` moved to `src/lib/format.ts`. Action errors show through one app-wide `Toaster` in the layout.
+- **Seed fix:** spreadsheet hyperlink cells whose text is rich text were imported as "[object Object]" (Darby's contact, and one survey respondent's name and email). `cellText` now handles them, and the two records were repaired in place from the spreadsheet.
+
