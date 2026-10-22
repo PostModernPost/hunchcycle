@@ -152,6 +152,17 @@ export async function createNextExperiment(id: string): Promise<Result> {
   return done(next.id);
 }
 
+/** Clears the "seeded, review me" tag once Adam has checked an imported experiment. */
+export async function markReviewed(id: string): Promise<Result> {
+  const [e] = await db.select().from(s.experiments).where(eq(s.experiments.id, id));
+  if (!e) return { ok: false, error: "Experiment not found." };
+  await db
+    .update(s.experiments)
+    .set({ tags: e.tags.filter((t) => t !== "seeded, review me"), updatedAt: new Date() })
+    .where(eq(s.experiments.id, id));
+  return done();
+}
+
 // ---------- Assumptions ----------
 
 export async function linkAssumption(experimentId: string, assumptionId: string): Promise<Result> {

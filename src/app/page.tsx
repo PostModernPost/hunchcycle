@@ -4,8 +4,8 @@ import { Board } from "@/components/board/Board";
 
 export const dynamic = "force-dynamic";
 
-export default async function BoardPage({ searchParams }: { searchParams: Promise<{ card?: string; view?: string }> }) {
-  const { card, view } = await searchParams;
+export default async function BoardPage({ searchParams }: { searchParams: Promise<{ card?: string }> }) {
+  const { card } = await searchParams;
   const [cards, assumptions, runs, scripts, types] = await Promise.all([
     loadCards(),
     db
@@ -25,7 +25,7 @@ export default async function BoardPage({ searchParams }: { searchParams: Promis
   return (
     <div>
       <h1 className="mb-4 text-2xl font-semibold tracking-tight">Board</h1>
-      <Board cards={cards} lists={{ assumptions, runs, scripts, types }} initialOpen={card} initialView={view === "assumptions" ? "assumptions" : "list"} />
+      <Board cards={cards} lists={{ assumptions, runs, scripts, types }} initialOpen={card} />
     </div>
   );
 }

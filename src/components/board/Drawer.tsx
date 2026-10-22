@@ -4,11 +4,11 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { BoardCard } from "@/lib/board-data";
-import { blockedMessage, checkMove, filled, FLOW, missingFor, toGateCard, type Stage } from "@/lib/gates";
+import { checkMove, filled, FLOW, missingFor, toGateCard, type Stage } from "@/lib/gates";
 import { experimentName, fmtDate, pct, STAGE_LABELS, STATUS_STYLES } from "@/lib/format";
 import { Pill, SeedFlag } from "@/components/ui";
 import * as A from "@/app/actions";
-import { Button, dateInput, inputCls, Label, SelectInput, TextInput, useAction } from "./fields";
+import { Button, dateInput, inputCls, Label, Reveal, SelectInput, TextInput, useAction } from "./fields";
 import { TypePicker, type ExperimentType } from "./TypePicker";
 
 export type Lists = {
@@ -72,7 +72,14 @@ export function Drawer({
           <div className="flex items-center gap-2">
             <Pill>{STAGE_LABELS[card.stage]}</Pill>
             {card.decision && <Pill className="bg-orange-100 text-orange-800">{card.decision}</Pill>}
-            <SeedFlag tags={card.tags} />
+            {card.tags.includes("seeded, review me") && (
+              <>
+                <SeedFlag tags={card.tags} />
+                <button className="text-xs text-accent hover:brightness-110" onClick={() => run(() => A.markReviewed(card.id))}>
+                  Mark reviewed
+                </button>
+              </>
+            )}
             <Link href={`/experiments/${card.id}`} className="ml-auto text-xs text-muted hover:text-ink">
               Full page
             </Link>
@@ -157,17 +164,27 @@ function Section({ stage, card, startOpen, children }: { stage: Stage; card: Boa
   );
 }
 
-/** What it takes to move on, plus forward and back buttons. */
+/** What is still missing, the button to move on, and "Move back" tucked in a small menu. */
 function GateBox({ card, onOpen }: { card: BoardCard; onOpen: (id: string) => void }) {
   const { run, pending } = useAction();
+  const [menu, setMenu] = useState(false);
   const idx = FLOW.indexOf(card.stage);
   if (card.stage === "closed") {
     return (
       <div className="mb-4 rounded-lg border border-line bg-white p-3 text-sm">
         This experiment is closed{card.closedAt ? ` (${fmtDate(card.closedAt)})` : ""}. It stays searchable.
         <div className="mt-2 flex flex-wrap gap-2">
-          <Button kind="primary" onClick={() => run(() => A.createNextExperiment(card.id), (r) => r.ok && r.id && onOpen(r.id))} disabled={pending}>
-            Create next experiment
+          <Button
+            kind="primary"
+            onClick={() =>
+              run(
+                () => A.createNextExperiment(card.id),
+                (r) => r.ok && r.id && onOpen(r.id),
+              )
+            }
+            disabled={pending}
+          >
+            Start next cycle
           </Button>
           <Button onClick={() => run(() => A.moveCard(card.id, "decision"))} disabled={pending}>
             Reopen in Decision
@@ -194,17 +211,32 @@ function GateBox({ card, onOpen }: { card: BoardCard; onOpen: (id: string) => vo
       ) : (
         <div className="font-medium">{next === "closed" ? "Ready to close." : `Ready to expand into ${STAGE_LABELS[next]}.`}</div>
       )}
-      <div className="mt-2 flex flex-wrap gap-2">
+      <div className="mt-2 flex items-center gap-2">
         <Button kind="primary" disabled={pending || !check.ok} onClick={() => run(() => A.moveCard(card.id, next))}>
           {next === "closed" ? "Close experiment" : `Expand into ${STAGE_LABELS[next]}`}
         </Button>
         {prev && (
-          <Button disabled={pending} onClick={() => run(() => A.moveCard(card.id, prev))}>
-            Back to {STAGE_LABELS[prev]}
-          </Button>
+          <div className="relative ml-auto">
+            <button className="rounded px-2 text-lg leading-none text-muted hover:text-ink" aria-label="More" onClick={() => setMenu(!menu)}>
+              ⋯
+            </button>
+            {menu && (
+              <div className="absolute right-0 z-20 mt-1 w-48 rounded-md border border-line bg-raised p-1 shadow-lg">
+                <button
+                  className="w-full rounded px-2 py-1.5 text-left text-sm hover:bg-stone-200"
+                  disabled={pending}
+                  onClick={() => {
+                    setMenu(false);
+                    run(() => A.moveCard(card.id, prev));
+                  }}
+                >
+                  Move back to {STAGE_LABELS[prev]}
+                </button>
+              </div>
+            )}
+          </div>
         )}
       </div>
-      {!check.ok && check.stage !== card.stage && <p className="mt-2 text-xs text-muted">{blockedMessage(check)}</p>}
     </div>
   );
 }
@@ -241,42 +273,58 @@ function AssumptionSection({ card, lists }: SectionProps) {
             ))}
         </select>
       </Label>
-      <form
-        className="rounded-md border border-dashed border-line p-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          run(() => A.createAssumption(card.id, draft), (r) => r.ok && setDraft({ ...draft, statement: "" }));
-        }}
-      >
-        <div className="mb-2 text-xs font-medium text-muted">Or write a new one</div>
-        <textarea className={inputCls} rows={2} placeholder="We believe that..." value={draft.statement} onChange={(e) => setDraft({ ...draft, statement: e.target.value })} />
-        <div className="mt-2 grid grid-cols-3 gap-2">
-          <Label text="Category">
-            <select className={inputCls} value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })}>
-              {CATEGORIES.map((c) => (
-                <option key={c}>{c}</option>
-              ))}
-            </select>
-          </Label>
-          <Label text="Importance (1 to 5)">
-            <select className={inputCls} value={draft.importance} onChange={(e) => setDraft({ ...draft, importance: Number(e.target.value) })}>
-              {SCORES.map((o) => (
-                <option key={o.value}>{o.value}</option>
-              ))}
-            </select>
-          </Label>
-          <Label text="Evidence (1 to 5)">
-            <select className={inputCls} value={draft.evidence} onChange={(e) => setDraft({ ...draft, evidence: Number(e.target.value) })}>
-              {SCORES.map((o) => (
-                <option key={o.value}>{o.value}</option>
-              ))}
-            </select>
-          </Label>
-        </div>
-        <Button type="submit" disabled={pending || !draft.statement.trim()}>
-          Add assumption
-        </Button>
-      </form>
+      <Reveal label="Write a new assumption">
+        {(close) => (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              run(
+                () => A.createAssumption(card.id, draft),
+                (r) => {
+                  if (r.ok) {
+                    setDraft({ ...draft, statement: "" });
+                    close();
+                  }
+                },
+              );
+            }}
+          >
+            <textarea
+              className={inputCls}
+              rows={2}
+              placeholder="We believe that..."
+              value={draft.statement}
+              onChange={(e) => setDraft({ ...draft, statement: e.target.value })}
+            />
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              <Label text="Category">
+                <select className={inputCls} value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })}>
+                  {CATEGORIES.map((c) => (
+                    <option key={c}>{c}</option>
+                  ))}
+                </select>
+              </Label>
+              <Label text="Importance (1 to 5)">
+                <select className={inputCls} value={draft.importance} onChange={(e) => setDraft({ ...draft, importance: Number(e.target.value) })}>
+                  {SCORES.map((o) => (
+                    <option key={o.value}>{o.value}</option>
+                  ))}
+                </select>
+              </Label>
+              <Label text="Evidence (1 to 5)">
+                <select className={inputCls} value={draft.evidence} onChange={(e) => setDraft({ ...draft, evidence: Number(e.target.value) })}>
+                  {SCORES.map((o) => (
+                    <option key={o.value}>{o.value}</option>
+                  ))}
+                </select>
+              </Label>
+            </div>
+            <Button type="submit" disabled={pending || !draft.statement.trim()}>
+              Add assumption
+            </Button>
+          </form>
+        )}
+      </Reveal>
     </div>
   );
 }
@@ -308,8 +356,18 @@ function HypothesisSection({ card, save, onOpen }: SectionProps & { onOpen: (id:
       <TextInput label="Anything to add to the because" value={card.becauseNote} onSave={save("becauseNote")} multiline />
       {card.stage === "hypothesis" && (
         <div className="rounded-md bg-stone-50 p-3 text-sm">
-          <p className="mb-2 text-muted">Want to test this assumption more than one way at the same time? Split makes a sibling card with the same assumptions and hypothesis.</p>
-          <Button disabled={pending} onClick={() => run(() => A.splitCard(card.id), (r) => r.ok && r.id && onOpen(r.id))}>
+          <p className="mb-2 text-muted">
+            Want to test this assumption more than one way at the same time? Split makes a sibling card with the same assumptions and hypothesis.
+          </p>
+          <Button
+            disabled={pending}
+            onClick={() =>
+              run(
+                () => A.splitCard(card.id),
+                (r) => r.ok && r.id && onOpen(r.id),
+              )
+            }
+          >
             Split into a sibling card
           </Button>
         </div>
@@ -427,82 +485,119 @@ function RunningSection({ card, lists }: SectionProps) {
   return (
     <div>
       <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">Sessions</h4>
-      {card.runs.length === 0 && <p className="mb-2 text-sm text-muted">No sessions linked yet. A session is one time you collected data, like an event night or a day of interviews.</p>}
+      {card.runs.length === 0 && (
+        <p className="mb-2 text-sm text-muted">No sessions linked yet. A session is one time you collected data, like an event night or a day of interviews.</p>
+      )}
       {card.runs.map((r) => (
         <div key={r.id} className="mb-1 flex items-center gap-2 text-sm">
           <span className="flex-1">
             {r.name} <span className="text-muted">{fmtDate(r.startDate)}</span>
-            <span className="text-xs text-muted">
-              {" "}
-              ({r.evidence.length} evidence)
-            </span>
+            <span className="text-xs text-muted"> ({r.evidence.length} evidence)</span>
           </span>
           <button className="text-xs text-muted hover:text-red-700" onClick={() => run(() => A.unlinkRun(card.id, r.id))}>
             Unlink
           </button>
         </div>
       ))}
-      <div className="mt-2 grid grid-cols-2 gap-2">
-        <Label text="Link an existing session">
-          <select className={inputCls} value="" onChange={(e) => e.target.value && run(() => A.linkRun(card.id, e.target.value))}>
-            <option value="">Choose...</option>
-            {lists.runs
-              .filter((r) => !linked.has(r.id))
-              .map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name}
-                  {r.startDate ? ` (${fmtDate(r.startDate)})` : ""}
-                </option>
-              ))}
-          </select>
-        </Label>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            run(() => A.createRun(card.id, newRun), (r) => r.ok && setNewRun({ name: "", date: "" }));
-          }}
-        >
-          <span className="mb-1 block text-xs font-medium text-muted">Or add a new session</span>
-          <input className={inputCls} placeholder="Session name" value={newRun.name} onChange={(e) => setNewRun({ ...newRun, name: e.target.value })} />
-          <div className="mt-1 flex gap-1">
-            <input className={inputCls} type="date" value={newRun.date} onChange={(e) => setNewRun({ ...newRun, date: e.target.value })} />
-            <Button type="submit" disabled={pending || !newRun.name.trim()}>
-              Add
-            </Button>
+      <Reveal label="Add a session">
+        {(close) => (
+          <div className="grid grid-cols-2 gap-2">
+            <Label text="Link an existing session">
+              <select
+                className={inputCls}
+                value=""
+                onChange={(e) => {
+                  if (!e.target.value) return;
+                  run(() => A.linkRun(card.id, e.target.value));
+                  close();
+                }}
+              >
+                <option value="">Choose...</option>
+                {lists.runs
+                  .filter((r) => !linked.has(r.id))
+                  .map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                      {r.startDate ? ` (${fmtDate(r.startDate)})` : ""}
+                    </option>
+                  ))}
+              </select>
+            </Label>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                run(
+                  () => A.createRun(card.id, newRun),
+                  (r) => {
+                    if (r.ok) {
+                      setNewRun({ name: "", date: "" });
+                      close();
+                    }
+                  },
+                );
+              }}
+            >
+              <span className="mb-1 block text-xs font-medium text-muted">Or add a new session</span>
+              <input className={inputCls} placeholder="Session name" value={newRun.name} onChange={(e) => setNewRun({ ...newRun, name: e.target.value })} />
+              <div className="mt-1 flex gap-1">
+                <input className={inputCls} type="date" value={newRun.date} onChange={(e) => setNewRun({ ...newRun, date: e.target.value })} />
+                <Button type="submit" disabled={pending || !newRun.name.trim()}>
+                  Add
+                </Button>
+              </div>
+            </form>
           </div>
-        </form>
-      </div>
+        )}
+      </Reveal>
 
       {card.runs.length > 0 && (
-        <form
-          className="mt-3 rounded-md border border-dashed border-line p-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            run(() => A.addEvidence(ev.runId || card.runs[0].id, ev), (r) => r.ok && setEv({ ...ev, summary: "" }));
-          }}
-        >
-          <div className="mb-2 text-xs font-medium text-muted">Add evidence</div>
-          <div className="grid grid-cols-2 gap-2">
-            <select className={inputCls} value={ev.runId || card.runs[0].id} onChange={(e) => setEv({ ...ev, runId: e.target.value })}>
-              {card.runs.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name}
-                </option>
-              ))}
-            </select>
-            <select className={inputCls} value={ev.type} onChange={(e) => setEv({ ...ev, type: e.target.value })}>
-              {opts(EVIDENCE_TYPES).map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <textarea className={`${inputCls} mt-2`} rows={2} placeholder="What you saw or heard" value={ev.summary} onChange={(e) => setEv({ ...ev, summary: e.target.value })} />
-          <Button type="submit" disabled={pending || !ev.summary.trim()}>
-            Add evidence
-          </Button>
-        </form>
+        <div>
+          <Reveal label="Add evidence">
+            {(close) => (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  run(
+                    () => A.addEvidence(ev.runId || card.runs[0].id, ev),
+                    (r) => {
+                      if (r.ok) {
+                        setEv({ ...ev, summary: "" });
+                        close();
+                      }
+                    },
+                  );
+                }}
+              >
+                <div className="grid grid-cols-2 gap-2">
+                  <select className={inputCls} value={ev.runId || card.runs[0].id} onChange={(e) => setEv({ ...ev, runId: e.target.value })}>
+                    {card.runs.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name}
+                      </option>
+                    ))}
+                  </select>
+                  <select className={inputCls} value={ev.type} onChange={(e) => setEv({ ...ev, type: e.target.value })}>
+                    {opts(EVIDENCE_TYPES).map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <textarea
+                  className={`${inputCls} mt-2`}
+                  rows={2}
+                  placeholder="What you saw or heard"
+                  value={ev.summary}
+                  onChange={(e) => setEv({ ...ev, summary: e.target.value })}
+                />
+                <Button type="submit" disabled={pending || !ev.summary.trim()}>
+                  Add evidence
+                </Button>
+              </form>
+            )}
+          </Reveal>
+        </div>
       )}
 
       <h4 className="mb-1 mt-4 text-xs font-semibold uppercase tracking-wide text-muted">Readings</h4>
@@ -539,36 +634,48 @@ function ReadingForm({ metric: m, evidence }: { metric: Metric; evidence: { id: 
     <div className="mb-3 rounded-md border border-line p-3">
       <div className="mb-1 text-sm font-medium">{m.name}</div>
       <Readings metric={m} />
-      <form
-        className="mt-2 flex flex-wrap items-end gap-1"
-        onSubmit={(e) => {
-          e.preventDefault();
-          run(() => A.addReading(m.id, v), (r) => r.ok && setV(blank));
-        }}
-      >
-        {m.type === "rate" ? (
-          <>
-            <input className={`${inputCls} w-16`} placeholder="count" value={v.numerator} onChange={set("numerator")} inputMode="numeric" />
-            <span className="pb-1.5 text-sm text-muted">of</span>
-            <input className={`${inputCls} w-16`} placeholder="total" value={v.denominator} onChange={set("denominator")} inputMode="numeric" />
-          </>
-        ) : (
-          <input className={`${inputCls} w-20`} placeholder="value" value={v.value} onChange={set("value")} inputMode="decimal" />
+      <Reveal label="Record a reading">
+        {(close) => (
+          <form
+            className="flex flex-wrap items-end gap-1"
+            onSubmit={(e) => {
+              e.preventDefault();
+              run(
+                () => A.addReading(m.id, v),
+                (r) => {
+                  if (r.ok) {
+                    setV(blank);
+                    close();
+                  }
+                },
+              );
+            }}
+          >
+            {m.type === "rate" ? (
+              <>
+                <input className={`${inputCls} w-16`} placeholder="count" value={v.numerator} onChange={set("numerator")} inputMode="numeric" />
+                <span className="pb-1.5 text-sm text-muted">of</span>
+                <input className={`${inputCls} w-16`} placeholder="total" value={v.denominator} onChange={set("denominator")} inputMode="numeric" />
+              </>
+            ) : (
+              <input className={`${inputCls} w-20`} placeholder="value" value={v.value} onChange={set("value")} inputMode="decimal" />
+            )}
+            <input className={`${inputCls} w-36`} type="date" value={v.date} onChange={set("date")} />
+            <input className={`${inputCls} w-32 flex-1`} placeholder="note" value={v.note} onChange={set("note")} />
+            <select className={`${inputCls} w-full`} value={v.evidenceId} onChange={set("evidenceId")}>
+              <option value="">No evidence linked (shows as unverified)</option>
+              {evidence.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.runName}: {(e.summary ?? "").slice(0, 70)}
+                </option>
+              ))}
+            </select>
+            <Button type="submit" disabled={pending}>
+              Record reading
+            </Button>
+          </form>
         )}
-        <input className={`${inputCls} w-36`} type="date" value={v.date} onChange={set("date")} />
-        <input className={`${inputCls} w-32 flex-1`} placeholder="note" value={v.note} onChange={set("note")} />
-        <select className={`${inputCls} w-full`} value={v.evidenceId} onChange={set("evidenceId")}>
-          <option value="">No evidence linked (shows as unverified)</option>
-          {evidence.map((e) => (
-            <option key={e.id} value={e.id}>
-              {e.runName}: {(e.summary ?? "").slice(0, 70)}
-            </option>
-          ))}
-        </select>
-        <Button type="submit" disabled={pending}>
-          Record reading
-        </Button>
-      </form>
+      </Reveal>
     </div>
   );
 }
@@ -649,7 +756,10 @@ function AssumptionUpdate({ card, assumption: a }: { card: BoardCard; assumption
         className="mt-2 grid grid-cols-3 gap-2"
         onSubmit={(e) => {
           e.preventDefault();
-          run(() => A.updateAssumptionFromDecision(card.id, a.id, v), (r) => r.ok && setV({ ...v, note: "" }));
+          run(
+            () => A.updateAssumptionFromDecision(card.id, a.id, v),
+            (r) => r.ok && setV({ ...v, note: "" }),
+          );
         }}
       >
         <Label text="New evidence (1 to 5)">

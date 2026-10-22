@@ -140,6 +140,25 @@ export function Button({
   );
 }
 
+/** A quiet "+ label" button that opens a form only when it is needed. */
+export function Reveal({ label, children }: { label: string; children: (close: () => void) => React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  if (!open)
+    return (
+      <button type="button" className="mt-1 text-sm text-accent hover:brightness-110" onClick={() => setOpen(true)}>
+        + {label}
+      </button>
+    );
+  return (
+    <div className="mt-2 rounded-md border border-dashed border-line p-3">
+      {children(() => setOpen(false))}
+      <button type="button" className="mt-2 text-xs text-muted hover:text-ink" onClick={() => setOpen(false)}>
+        Cancel
+      </button>
+    </div>
+  );
+}
+
 /** Date as yyyy-mm-dd in Pacific time, for date inputs. */
 export function dateInput(d: Date | string | null | undefined): string {
   if (!d) return "";

@@ -53,3 +53,12 @@ Choices made during the build that the brief didn't spell out.
 - **Numbering** counts up within a type in creation order. "Start next cycle" (was "Create next experiment") and Split both take the next number in the same type.
 - **Seeded mapping** (Adam unsure, reversible since types are editable): bar interviews to Customer Interviews 1, August survey to Survey 1, Sprints 1 and 2 to Marketing 1 and 2, F45 and Groundfloor to Event 1 and 2, Game Day Pilot to Pilot 1, PT clinic to Partnership 1. Adam's own new bar interviews row became Customer Interviews 2.
 
+## Simplification pass (2026-10-22, Adam picked A, B, C, E, F)
+
+- **Group by assumption is removed.** Rows are grouped by type instead, cycles in number order, so a type's history reads 1, 2, 3. Groups with something past its report date come first, then groups with active cycles, then finished-only groups.
+- **Finished cycles are slim lines** (date, decision, note) inside their type group. The newest finished cycle of a type offers "Start next cycle". "Hide finished cycles" toggles them.
+- **Finished steps show one short fact** ("2 assumptions", the MVP name, "3 sessions", "2 pass, 1 fail", "Pivot"). Only the current step shows detail and what is missing.
+- **Seeded tag:** one notice on the board instead of a tag per row; the tag and a "Mark reviewed" button (clears it) are in the panel.
+- **Panel:** new assumption, add session, add evidence, and record a reading open from "+" buttons. The checklist shows only what is missing and the main button; "Move back" is in a small menu.
+- Not done (Adam passed on it): collapsing the toolbar into one "New experiment" button.
+

@@ -1,33 +1,28 @@
 "use client";
-// The board: one row per experiment. A row fills in left to right as the experiment moves
-// through the chain (BRIEF section 4). Drag the current step into a later column to expand
-// the row (gated), or into an earlier one to move it back. Click any step to open the drawer there.
+// The board: one row per experiment, grouped by type so its cycles read 1, 2, 3. A row fills in
+// left to right as the experiment moves through the chain (BRIEF section 4). Drag the current step
+// into a later column to expand the row (gated), or into an earlier one to move it back. Finished
+// cycles show as slim lines. Click any step to open the drawer there.
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { DndContext, DragOverlay, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import type { BoardCard } from "@/lib/board-data";
 import { BOARD_STAGES, blockedMessage, checkMove, filled, isStale, missingFor, toGateCard, type Stage } from "@/lib/gates";
-import { experimentName, experimentSubtitle, fmtDate, STAGE_LABELS, STATUS_STYLES } from "@/lib/format";
-import { Pill, SeedFlag } from "@/components/ui";
+import { experimentName, experimentSubtitle, fmtDate, STAGE_LABELS } from "@/lib/format";
+import { Pill } from "@/components/ui";
 import { createCard, createNextExperiment, moveCard } from "@/app/actions";
 import { Drawer, type Lists } from "./Drawer";
 import { Button, inputCls, ToastContext, useAction } from "./fields";
 import { TypePicker, type ExperimentType } from "./TypePicker";
 
 const WIP_LIMIT = 3;
+const SEED_TAG = "seeded, review me";
 const STAGE_INDEX = Object.fromEntries(BOARD_STAGES.map((s, i) => [s, i])) as Record<Stage, number>;
-const GRID = { gridTemplateColumns: `250px repeat(${BOARD_STAGES.length}, 180px)` };
+const GRID = { gridTemplateColumns: `250px repeat(${BOARD_STAGES.length}, 170px)` };
 export const stageColor = (s: Stage) => `var(--color-stage-${s === "closed" ? "decision" : s})`;
 
-type View = "list" | "assumptions";
-type Props = { cards: BoardCard[]; lists: Lists; initialOpen?: string; initialView?: View };
-type Assumption = Lists["assumptions"][number];
-type Scored = { importance: number; evidence: number };
-
-// Riskiest first: most important, least evidence.
-const riskier = (a: Scored, b: Scored) => b.importance - a.importance || a.evidence - b.evidence;
-/** The assumption an experiment is filed under when grouping: its riskiest linked one. */
-const primaryOf = (c: BoardCard) => [...c.assumptions].sort(riskier)[0] ?? null;
+type Props = { cards: BoardCard[]; lists: Lists; initialOpen?: string };
 type Opener = (id: string | null, focus?: Stage) => void;
+type Group = { key: string; name: string; cards: BoardCard[] };
 
 export function Board(props: Props) {
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -52,43 +47,34 @@ export function Board(props: Props) {
   );
 }
 
-function BoardInner({ cards, lists, initialOpen, initialView = "list" }: Props) {
+function BoardInner({ cards, lists, initialOpen }: Props) {
   const toast = useContext(ToastContext);
   const { run } = useAction();
   const [openState, setOpenState] = useState<{ id: string; focus?: Stage } | null>(initialOpen ? { id: initialOpen } : null);
   const [moved, setMoved] = useState<Record<string, Stage>>({}); // optimistic stage while a move saves
   const [dragId, setDragId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [showClosed, setShowClosed] = useState(false);
-  const [view, setView] = useState<View>(initialView);
+  const [hideFinished, setHideFinished] = useState(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const now = useMemo(() => new Date(), []);
 
-  // Keep the open card and the view in the URL so a link or reload brings them back.
-  const setParam = (key: string, value: string | null) => {
-    const url = new URL(window.location.href);
-    if (value) url.searchParams.set(key, value);
-    else url.searchParams.delete(key);
-    window.history.replaceState(null, "", url);
-  };
+  // Keep the open card in the URL so a link or reload reopens it.
   const open: Opener = (id, focus) => {
     setOpenState(id ? { id, focus } : null);
-    setParam("card", id);
-  };
-  const switchView = (v: View) => {
-    setView(v);
-    setParam("view", v === "list" ? null : v);
+    const url = new URL(window.location.href);
+    if (id) url.searchParams.set("card", id);
+    else url.searchParams.delete("card");
+    window.history.replaceState(null, "", url);
   };
 
-  const withStage = (c: BoardCard) => ({ ...c, stage: moved[c.id] ?? c.stage });
   const q = query.trim().toLowerCase();
-  const visible = cards.map(withStage).filter((c) => !q || `${experimentName(c)} ${c.title ?? ""}`.toLowerCase().includes(q));
-  // stale first, then furthest along, then oldest
-  const active = visible
-    .filter((c) => c.stage !== "closed")
-    .sort((a, b) => Number(isStale(b, now)) - Number(isStale(a, now)) || STAGE_INDEX[b.stage] - STAGE_INDEX[a.stage]);
-  const closed = visible.filter((c) => c.stage === "closed");
-  const running = active.filter((c) => c.stage === "running").length;
+  const visible = cards
+    .map((c) => ({ ...c, stage: moved[c.id] ?? c.stage }))
+    .filter((c) => !q || `${experimentName(c)} ${c.title ?? ""}`.toLowerCase().includes(q))
+    .filter((c) => !hideFinished || c.stage !== "closed");
+  const groups = groupByType(visible, now);
+  const running = visible.filter((c) => c.stage === "running").length;
+  const toReview = cards.filter((c) => c.tags.includes(SEED_TAG)).length;
   const openCard = cards.find((c) => c.id === openState?.id) ?? null;
   const dragCard = visible.find((c) => c.id === dragId) ?? null;
 
@@ -113,7 +99,13 @@ function BoardInner({ cards, lists, initialOpen, initialView = "list" }: Props) 
 
   return (
     <>
-      <Toolbar query={query} setQuery={setQuery} onCreated={(id) => open(id)} view={view} setView={switchView} types={lists.types} />
+      <Toolbar query={query} setQuery={setQuery} onCreated={(id) => open(id)} types={lists.types} />
+      {toReview > 0 && (
+        <p className="mb-3 text-sm text-muted">
+          <span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-violet-800" />
+          {toReview} imported experiment{toReview === 1 ? " needs" : "s need"} a review. Open one and click &quot;Mark reviewed&quot; once it looks right.
+        </p>
+      )}
       {running > WIP_LIMIT && (
         <div className="mb-3 rounded-md bg-amber-100 px-3 py-2 text-sm text-amber-900">
           {running} experiments are running. More than {WIP_LIMIT} at once makes it hard to learn from any of them.
@@ -123,22 +115,12 @@ function BoardInner({ cards, lists, initialOpen, initialView = "list" }: Props) 
       {/* A fixed id keeps dnd-kit's generated ids the same on the server and in the browser. */}
       <DndContext id="board" sensors={sensors} onDragStart={(e) => setDragId(String(e.active.id))} onDragCancel={() => setDragId(null)} onDragEnd={onDragEnd}>
         <div className="-mx-4 overflow-x-auto px-4 pb-4">
-          <div className="grid min-w-max gap-y-2" style={GRID}>
+          <div className="grid min-w-max gap-y-1.5" style={GRID}>
             <HeaderRow />
-            {active.length === 0 && view === "list" && <div className="col-span-full py-6 text-sm text-muted">No experiments match.</div>}
-            {view === "list" ? (
-              active.map((c) => <Row key={c.id} card={c} now={now} dragging={dragId === c.id} onOpen={open} />)
-            ) : (
-              <Grouped
-                cards={showClosed ? visible : active}
-                assumptions={lists.assumptions}
-                types={lists.types}
-                now={now}
-                dragId={dragId}
-                onOpen={open}
-                searching={!!q}
-              />
-            )}
+            {groups.length === 0 && <div className="col-span-full py-6 text-sm text-muted">No experiments match.</div>}
+            {groups.map((g) => (
+              <TypeGroup key={g.key} group={g} now={now} dragId={dragId} onOpen={open} />
+            ))}
           </div>
         </div>
         <DragOverlay dropAnimation={null}>
@@ -150,20 +132,9 @@ function BoardInner({ cards, lists, initialOpen, initialView = "list" }: Props) 
         </DragOverlay>
       </DndContext>
 
-      <div className="mt-4">
-        <button className="text-sm text-muted hover:text-ink" onClick={() => setShowClosed(!showClosed)}>
-          {showClosed ? "Hide" : "Show"} closed experiments ({closed.length}){view === "assumptions" && " in their groups"}
-        </button>
-        {showClosed && view === "list" && (
-          <div className="-mx-4 mt-2 overflow-x-auto px-4 pb-4">
-            <div className="grid min-w-max gap-y-2" style={GRID}>
-              {closed.map((c) => (
-                <ClosedRow key={c.id} card={c} onOpen={open} />
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+      <button className="mt-2 text-sm text-muted hover:text-ink" onClick={() => setHideFinished(!hideFinished)}>
+        {hideFinished ? "Show finished cycles" : "Hide finished cycles"}
+      </button>
 
       {openCard && (
         <Drawer
@@ -180,26 +151,54 @@ function BoardInner({ cards, lists, initialOpen, initialView = "list" }: Props) 
   );
 }
 
+/**
+ * One group per type, cycles in number order. Groups with something past its report date come
+ * first, then groups with active cycles, then groups with only finished cycles.
+ */
+function groupByType(cards: BoardCard[], now: Date): Group[] {
+  const map = new Map<string, Group>();
+  for (const c of cards) {
+    const key = c.typeId ?? "none";
+    if (!map.has(key)) map.set(key, { key, name: c.type?.name ?? "No type", cards: [] });
+    map.get(key)!.cards.push(c);
+  }
+  const rank = (g: Group) => (g.cards.some((c) => isStale(c, now)) ? 0 : g.cards.some((c) => c.stage !== "closed") ? 1 : 2);
+  for (const g of map.values()) g.cards.sort((a, b) => (a.cycleNumber ?? 0) - (b.cycleNumber ?? 0));
+  return [...map.values()].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+}
+
+function TypeGroup({ group, now, dragId, onOpen }: { group: Group; now: Date; dragId: string | null; onOpen: Opener }) {
+  const last = group.cards[group.cards.length - 1];
+  return (
+    <>
+      <div className="sticky left-0 col-span-full mt-3 text-xs font-semibold uppercase tracking-wide text-muted">{group.name}</div>
+      {group.cards.map((c) =>
+        c.stage === "closed" ? (
+          <FinishedRow key={c.id} card={c} onOpen={onOpen} offerNext={c.id === last.id} />
+        ) : (
+          <Row key={c.id} card={c} now={now} dragging={dragId === c.id} onOpen={onOpen} />
+        ),
+      )}
+    </>
+  );
+}
+
 function Toolbar({
   query,
   setQuery,
   onCreated,
-  view,
-  setView,
   types,
 }: {
   query: string;
   setQuery: (q: string) => void;
   onCreated: (id: string) => void;
-  view: View;
-  setView: (v: View) => void;
   types: ExperimentType[];
 }) {
   const [title, setTitle] = useState("");
   const [typeId, setTypeId] = useState("");
   const { run, pending } = useAction();
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-2">
+    <div className="mb-3 flex flex-wrap items-center gap-2">
       <form
         className="flex gap-2"
         onSubmit={(e) => {
@@ -222,134 +221,7 @@ function Toolbar({
           Add experiment
         </Button>
       </form>
-      <div className="ml-auto flex overflow-hidden rounded-md border border-line text-sm" role="group" aria-label="Board view">
-        <button onClick={() => setView("list")} className={`px-3 py-1.5 ${view === "list" ? "bg-raised font-medium text-ink" : "text-muted hover:text-ink"}`}>
-          List
-        </button>
-        <button onClick={() => setView("assumptions")} className={`px-3 py-1.5 ${view === "assumptions" ? "bg-raised font-medium text-ink" : "text-muted hover:text-ink"}`}>
-          Group by assumption
-        </button>
-      </div>
-      <input className={`${inputCls} w-56`} placeholder="Search experiments" value={query} onChange={(e) => setQuery(e.target.value)} />
-    </div>
-  );
-}
-
-/**
- * Group by assumption: one band per assumption (riskiest first) with the experiments filed
- * under it in the order they were started, so repeated cycles read top to bottom.
- * An experiment that tests several assumptions appears once, under its riskiest one.
- */
-function Grouped({
-  cards,
-  assumptions,
-  types,
-  now,
-  dragId,
-  onOpen,
-  searching,
-}: {
-  cards: BoardCard[];
-  assumptions: Assumption[];
-  types: ExperimentType[];
-  now: Date;
-  dragId: string | null;
-  onOpen: Opener;
-  searching: boolean;
-}) {
-  const [showUntested, setShowUntested] = useState(false);
-  const byAssumption = new Map<string, BoardCard[]>();
-  const unlinked: BoardCard[] = [];
-  for (const c of [...cards].sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt))) {
-    const p = primaryOf(c);
-    if (!p) unlinked.push(c);
-    else byAssumption.set(p.id, [...(byAssumption.get(p.id) ?? []), c]);
-  }
-  const sorted = [...assumptions].sort(riskier);
-  const withRows = sorted.filter((a) => byAssumption.has(a.id));
-  const without = sorted.filter((a) => !byAssumption.has(a.id));
-  const rows = (list: BoardCard[], bandId?: string) =>
-    list.map((c) => {
-      const also = c.assumptions.filter((a) => a.id !== bandId);
-      return c.stage === "closed" ? (
-        <ClosedRow key={c.id} card={c} onOpen={onOpen} alsoTests={also} />
-      ) : (
-        <Row key={c.id} card={c} now={now} dragging={dragId === c.id} onOpen={onOpen} alsoTests={also} />
-      );
-    });
-
-  return (
-    <>
-      {withRows.map((a) => (
-        <Band key={a.id} assumption={a} count={byAssumption.get(a.id)!.length} onOpen={onOpen} types={types}>
-          {rows(byAssumption.get(a.id)!, a.id)}
-        </Band>
-      ))}
-      {unlinked.length > 0 && (
-        <>
-          <div className="sticky left-0 col-span-full mt-4 text-sm font-semibold text-muted">No assumption linked yet</div>
-          {rows(unlinked)}
-        </>
-      )}
-      {!searching && without.length > 0 && (
-        <div className="sticky left-0 col-span-full mt-4 max-w-4xl">
-          <button className="text-sm text-muted hover:text-ink" onClick={() => setShowUntested(!showUntested)}>
-            {showUntested ? "Hide" : "Show"} assumptions with no experiment yet ({without.length})
-          </button>
-          {showUntested && (
-            <div className="mt-2 space-y-2">
-              {without.map((a) => (
-                <BandHeader key={a.id} assumption={a} onOpen={onOpen} types={types} />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </>
-  );
-}
-
-function Band({
-  assumption,
-  count,
-  onOpen,
-  types,
-  children,
-}: {
-  assumption: Assumption;
-  count: number;
-  onOpen: Opener;
-  types: ExperimentType[];
-  children: React.ReactNode;
-}) {
-  return (
-    <>
-      <div id={`band-${assumption.id}`} className="sticky left-0 col-span-full mt-4 max-w-4xl scroll-mt-4">
-        <BandHeader assumption={assumption} count={count} onOpen={onOpen} types={types} />
-      </div>
-      {children}
-    </>
-  );
-}
-
-function BandHeader({ assumption: a, count, onOpen, types }: { assumption: Assumption; count?: number; onOpen: Opener; types: ExperimentType[] }) {
-  const { run } = useAction();
-  return (
-    <div className="flex flex-wrap items-start gap-x-3 gap-y-1 rounded-lg border border-line bg-surface px-3 py-2">
-      <Pill className={STATUS_STYLES[a.status]}>{a.status}</Pill>
-      <div className="min-w-0 flex-1">
-        <div className="text-sm font-medium">{a.statement}</div>
-        <div className="text-xs text-muted">
-          {a.category}, importance {a.importance} of 5, evidence {a.evidence} of 5
-          {count != null && `, ${count} experiment${count === 1 ? "" : "s"}`}
-        </div>
-      </div>
-      <TypePicker
-        types={types}
-        placeholder="+ New experiment"
-        className="w-44 py-1 text-xs"
-        onPick={(typeId) => run(() => createCard(typeId, "", a.id), (r) => r.ok && r.id && onOpen(r.id))}
-      />
+      <input className={`${inputCls} ml-auto w-56`} placeholder="Search experiments" value={query} onChange={(e) => setQuery(e.target.value)} />
     </div>
   );
 }
@@ -368,42 +240,19 @@ function HeaderRow() {
   );
 }
 
-function TitleCell({
-  card: c,
-  now,
-  onOpen,
-  alsoTests,
-  children,
-}: {
-  card: BoardCard;
-  now?: Date;
-  onOpen: Opener;
-  alsoTests?: { id: string; statement: string }[];
-  children?: React.ReactNode;
-}) {
+function TitleCell({ card: c, now, onOpen, slim, children }: { card: BoardCard; now?: Date; onOpen: Opener; slim?: boolean; children?: React.ReactNode }) {
+  const stale = now && isStale(c, now);
   return (
     <div className="sticky left-0 z-10 bg-paper pr-3">
-      <div className="h-full rounded-l-lg border-l-4 bg-surface p-3" style={{ borderLeftColor: stageColor(c.stage) }}>
+      <div className={`h-full rounded-l-lg border-l-4 bg-surface ${slim ? "px-3 py-1.5" : "p-3"}`} style={{ borderLeftColor: stageColor(c.stage) }}>
         <button className="text-left text-sm font-semibold leading-snug hover:underline" onClick={() => onOpen(c.id)}>
           {experimentName(c)}
         </button>
-        {experimentSubtitle(c) && <div className="text-xs leading-snug text-muted">{experimentSubtitle(c)}</div>}
-        <div className="mt-1.5 flex flex-wrap gap-1">
-          {now && isStale(c, now) && <Pill className="bg-red-100 text-red-800">past report date</Pill>}
-          {c.siblingGroup && <Pill className="bg-sky-100 text-sky-800">split</Pill>}
-          <SeedFlag tags={c.tags} />
-        </div>
-        {alsoTests && alsoTests.length > 0 && (
-          <div className="mt-1.5 text-xs text-muted">
-            Also tests:{" "}
-            {alsoTests.map((a, i) => (
-              <span key={a.id}>
-                {i > 0 && ", "}
-                <a href={`#band-${a.id}`} className="underline decoration-dotted hover:text-ink" title={a.statement}>
-                  {a.statement.length > 40 ? a.statement.slice(0, 40).trimEnd() + "..." : a.statement}
-                </a>
-              </span>
-            ))}
+        {experimentSubtitle(c) && <div className={`text-xs leading-snug text-muted ${slim ? "line-clamp-1" : ""}`}>{experimentSubtitle(c)}</div>}
+        {(stale || c.siblingGroup) && (
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            {stale && <Pill className="bg-red-100 text-red-800">past report date</Pill>}
+            {c.siblingGroup && <Pill className="bg-sky-100 text-sky-800">split</Pill>}
           </div>
         )}
         {children}
@@ -412,18 +261,11 @@ function TitleCell({
   );
 }
 
-type AlsoTests = { id: string; statement: string }[];
-
-function Row({ card: c, now, dragging, onOpen, alsoTests }: { card: BoardCard; now: Date; dragging: boolean; onOpen: Opener; alsoTests?: AlsoTests }) {
+function Row({ card: c, now, dragging, onOpen }: { card: BoardCard; now: Date; dragging: boolean; onOpen: Opener }) {
   const current = STAGE_INDEX[c.stage];
-  const missing = missingFor(c.stage, toGateCard(c)).length;
   return (
     <>
-      <TitleCell card={c} now={now} onOpen={onOpen} alsoTests={alsoTests}>
-        <div className={`mt-1.5 text-xs ${missing ? "text-amber-700" : "text-green-700"}`}>
-          {missing ? `${missing} to fill in ${STAGE_LABELS[c.stage]}` : `Ready to expand into ${STAGE_LABELS[BOARD_STAGES[current + 1]] ?? "closing"}`}
-        </div>
-      </TitleCell>
+      <TitleCell card={c} now={now} onOpen={onOpen} />
       {BOARD_STAGES.map((s, i) =>
         i < current ? (
           <DoneCell key={s} card={c} stage={s} first={i === 0} onOpen={onOpen} />
@@ -437,33 +279,42 @@ function Row({ card: c, now, dragging, onOpen, alsoTests }: { card: BoardCard; n
   );
 }
 
-function ClosedRow({ card: c, onOpen, alsoTests }: { card: BoardCard; onOpen: Opener; alsoTests?: AlsoTests }) {
+/** A finished cycle: one slim line with its decision, so earlier cycles stay in view without taking space. */
+function FinishedRow({ card: c, onOpen, offerNext }: { card: BoardCard; onOpen: Opener; offerNext: boolean }) {
   const { run, pending } = useAction();
   return (
     <>
-      <TitleCell card={c} onOpen={onOpen} alsoTests={alsoTests}>
-        <div className="mt-1 text-xs text-muted">Closed {fmtDate(c.closedAt)}</div>
-        <div className="mt-2">
-          <Button disabled={pending} onClick={() => run(() => createNextExperiment(c.id), (r) => r.ok && r.id && onOpen(r.id))}>
-            Start next cycle
-          </Button>
-        </div>
-      </TitleCell>
-      {BOARD_STAGES.map((s, i) => (
-        <StepBody key={s} card={c} stage={s} first={i === 0} last={i === BOARD_STAGES.length - 1} onOpen={onOpen} dim />
-      ))}
+      <TitleCell card={c} onOpen={onOpen} slim />
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => onOpen(c.id, "decision")}
+        onKeyDown={(e) => e.key === "Enter" && onOpen(c.id, "decision")}
+        className="flex cursor-pointer items-center gap-3 rounded-r-lg border border-line px-3 text-xs hover:brightness-125"
+        style={{ gridColumn: `span ${BOARD_STAGES.length}`, background: "color-mix(in oklab, var(--color-stage-decision) 8%, var(--color-surface))" }}
+      >
+        <span className="text-muted">Finished {fmtDate(c.closedAt)}</span>
+        {c.decision && <span className="font-semibold capitalize">{c.decision}</span>}
+        {c.decisionNote && <span className="line-clamp-1 flex-1 text-muted">{c.decisionNote}</span>}
+        {offerNext && (
+          <span className="ml-auto" onClick={(e) => e.stopPropagation()}>
+            <Button kind="quiet" disabled={pending} onClick={() => run(() => createNextExperiment(c.id), (r) => r.ok && r.id && onOpen(r.id))}>
+              Start next cycle
+            </Button>
+          </span>
+        )}
+      </div>
     </>
   );
 }
 
-/** A filled step: tinted with its column's color, showing a short summary. */
+/** A filled step, tinted with its column's color. */
 function StepBody({
   card,
   stage,
   first,
   last,
   onOpen,
-  dim,
   strong,
   children,
 }: {
@@ -472,9 +323,8 @@ function StepBody({
   first?: boolean;
   last?: boolean;
   onOpen: Opener;
-  dim?: boolean;
   strong?: boolean;
-  children?: React.ReactNode;
+  children: React.ReactNode;
 }) {
   const color = stageColor(stage);
   return (
@@ -483,14 +333,13 @@ function StepBody({
       tabIndex={0}
       onClick={() => onOpen(card.id, stage)}
       onKeyDown={(e) => e.key === "Enter" && onOpen(card.id, stage)}
-      className={`h-full cursor-pointer border-y border-r border-line p-3 text-xs leading-relaxed hover:brightness-125 ${first ? "border-l" : ""} ${last ? "rounded-r-lg" : ""} ${dim ? "opacity-80" : ""}`}
+      className={`h-full cursor-pointer border-y border-r border-line p-3 text-xs leading-relaxed hover:brightness-125 ${first ? "border-l" : ""} ${last ? "rounded-r-lg" : ""}`}
       style={{
-        background: `color-mix(in oklab, ${color} ${strong ? 26 : 14}%, var(--color-surface))`,
+        background: `color-mix(in oklab, ${color} ${strong ? 26 : 12}%, var(--color-surface))`,
         borderTopColor: strong ? color : undefined,
         borderTopWidth: strong ? 2 : undefined,
       }}
     >
-      <Brief card={card} stage={stage} />
       {children}
     </div>
   );
@@ -500,18 +349,21 @@ function DoneCell({ card, stage, first, onOpen }: { card: BoardCard; stage: Stag
   const { setNodeRef, isOver } = useDroppable({ id: `${card.id}|${stage}` });
   return (
     <div ref={setNodeRef} className={isOver ? "outline outline-2 -outline-offset-2 outline-stone-400" : ""}>
-      <StepBody card={card} stage={stage} first={first} onOpen={onOpen} />
+      <StepBody card={card} stage={stage} first={first} onOpen={onOpen}>
+        <p className="line-clamp-2 text-muted">{fact(card, stage)}</p>
+      </StepBody>
     </div>
   );
 }
 
-/** The step the experiment is on now. This is what you drag. */
+/** The step the experiment is on now: the only one with detail, and the one you drag. */
 function CurrentCell({ card, first, onOpen }: { card: BoardCard; first: boolean; onOpen: Opener }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: card.id });
   const missing = missingFor(card.stage, toGateCard(card));
   return (
     <div ref={setNodeRef} {...listeners} {...attributes} className={`h-full ${isDragging ? "opacity-50" : ""}`} title="Click to open. Drag right to expand.">
       <StepBody card={card} stage={card.stage} first={first} last onOpen={onOpen} strong>
+        <Detail card={card} stage={card.stage} />
         <div className={`mt-2 flex items-center justify-between font-medium ${missing.length ? "text-amber-700" : "text-green-700"}`}>
           <span>{missing.length ? `${missing.length} to fill` : "Ready"}</span>
           <span className="text-base leading-none text-muted" aria-hidden>
@@ -550,10 +402,35 @@ function FutureCell({ card, stage, dragging, next }: { card: BoardCard; stage: S
   );
 }
 
-/** Two or three lines summarizing one step of an experiment. */
-function Brief({ card: c, stage }: { card: BoardCard; stage: Stage }) {
-  const clamp = (s: string | null | undefined, n = 90) => (s && s.length > n ? s.slice(0, n).trimEnd() + "..." : s);
-  const none = <span className="text-muted">Nothing yet</span>;
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+const clamp = (s: string | null | undefined, n: number) => (s && s.length > n ? s.slice(0, n).trimEnd() + "..." : (s ?? ""));
+
+/** One short fact for a finished step. */
+function fact(c: BoardCard, stage: Stage): string {
+  switch (stage) {
+    case "assumption":
+      return plural(c.assumptions.length, "assumption");
+    case "hypothesis":
+      return [filled(c.howMany) && clamp(c.howMany, 30), filled(c.byWhen) && `by ${clamp(c.byWhen, 24)}`].filter(Boolean).join(", ") || "Written";
+    case "experiment":
+      return c.title || plural(c.metrics.length, "metric");
+    case "running":
+      return plural(c.runs.length, "session");
+    case "results": {
+      const r = { pass: 0, fail: 0, unclear: 0 };
+      for (const m of c.metrics) if (m.result) r[m.result]++;
+      return [r.pass && `${r.pass} pass`, r.fail && `${r.fail} fail`, r.unclear && `${r.unclear} unclear`].filter(Boolean).join(", ") || "Written up";
+    }
+    case "decision":
+      return c.decision ? c.decision.charAt(0).toUpperCase() + c.decision.slice(1) : "";
+    default:
+      return "";
+  }
+}
+
+/** A few lines about the step the experiment is on now. */
+function Detail({ card: c, stage }: { card: BoardCard; stage: Stage }) {
+  const none = <p className="text-muted">Nothing yet</p>;
   switch (stage) {
     case "assumption":
       if (!c.assumptions.length) return none;
@@ -566,64 +443,40 @@ function Brief({ card: c, stage }: { card: BoardCard; stage: Stage }) {
     case "hypothesis":
       if (!filled(c.who) && !filled(c.action)) return none;
       return (
-        <>
-          <p className="line-clamp-3">
-            {filled(c.who) ? c.who : "Someone"} will {filled(c.action) ? c.action!.charAt(0).toLowerCase() + c.action!.slice(1) : "..."}
-          </p>
-          <p className="mt-1 text-muted">
-            {[filled(c.howMany) && clamp(c.howMany, 30), filled(c.byWhen) && `by ${clamp(c.byWhen, 30)}`].filter(Boolean).join(", ")}
-          </p>
-        </>
+        <p className="line-clamp-3">
+          {filled(c.who) ? c.who : "Someone"} will {filled(c.action) ? c.action!.charAt(0).toLowerCase() + c.action!.slice(1) : "..."}
+        </p>
       );
     case "experiment":
       if (!c.startDate && !c.metrics.length && !c.title) return none;
       return (
         <>
-          <p className="line-clamp-2">{c.title || c.type?.name || "No type"}</p>
+          {c.title && <p className="line-clamp-2">{c.title}</p>}
           <p className="text-muted">
             {c.startDate ? fmtDate(c.startDate) : "No start"} to {c.reportDate ? fmtDate(c.reportDate) : "no report date"}
           </p>
-          <p className="mt-1 line-clamp-2">
-            {c.metrics.length ? `${c.metrics.length} metric${c.metrics.length === 1 ? "" : "s"}: ${c.metrics[0].name}` : "No metrics yet"}
-          </p>
+          <p className="mt-1 text-muted">{plural(c.metrics.length, "metric")}</p>
         </>
       );
     case "running": {
       const readings = c.metrics.reduce((n, m) => n + m.readings.length, 0);
-      const evidence = c.runs.reduce((n, r) => n + r.evidence.length, 0);
       if (!c.runs.length && !readings) return none;
       return (
-        <>
-          <p>
-            {c.runs.length} session{c.runs.length === 1 ? "" : "s"}, {evidence} evidence
-          </p>
-          <p className="text-muted">
-            {readings} reading{readings === 1 ? "" : "s"}
-          </p>
-        </>
+        <p>
+          {plural(c.runs.length, "session")}, {plural(readings, "reading")}
+        </p>
       );
     }
     case "results": {
-      const r = { pass: 0, fail: 0, unclear: 0 };
-      for (const m of c.metrics) if (m.result) r[m.result]++;
-      if (!r.pass && !r.fail && !r.unclear && !filled(c.rawLearnings)) return none;
+      const decided = c.metrics.filter((m) => m.result).length;
       return (
-        <>
-          <p>
-            {r.pass} pass, {r.fail} fail, {r.unclear} unclear
-          </p>
-          {filled(c.insights ?? c.rawLearnings) && <p className="mt-1 line-clamp-2 text-muted">{c.insights ?? c.rawLearnings}</p>}
-        </>
+        <p>
+          {decided} of {plural(c.metrics.length, "metric")} scored
+        </p>
       );
     }
     case "decision":
-      if (!c.decision) return none;
-      return (
-        <>
-          <p className="font-semibold capitalize">{c.decision}</p>
-          {c.decisionNote && <p className="mt-1 line-clamp-2 text-muted">{c.decisionNote}</p>}
-        </>
-      );
+      return c.decision ? <p className="font-semibold capitalize">{c.decision}</p> : none;
     default:
       return null;
   }
