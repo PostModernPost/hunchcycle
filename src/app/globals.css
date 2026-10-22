@@ -1,12 +1,88 @@
 @import "tailwindcss";
 
-@theme {
+/*
+  One fixed dark palette (no theme switch; see BRIEF section 11).
+  Slate blue base with warm text and an apricot accent.
+
+  The hue scales below are remapped for dark backgrounds so existing pill classes keep
+  working: low shades (50 to 300) are dark tints for backgrounds and borders, high shades
+  (400 to 900) are light tints for text. So "bg-green-100 text-green-800" reads as a soft
+  dark green chip with light green text.
+*/
+@theme static {
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --color-ink: #1c1917;
-  --color-muted: #78716c;
-  --color-line: #e7e5e4;
-  --color-paper: #fafaf9;
-  --color-accent: #c2410c;
+
+  --color-paper: #232838;
+  --color-surface: #2b3144;
+  --color-raised: #353c52;
+  --color-line: #414860;
+  --color-ink: #ebe6dc;
+  --color-muted: #a0a6bb;
+  --color-accent: #f2ab6d;
+
+  /* one hue per board column, in chain order */
+  --color-stage-assumption: #c497c9;
+  --color-stage-hypothesis: #a596ea;
+  --color-stage-experiment: #7fa7f5;
+  --color-stage-metrics: #5fc6c2;
+  --color-stage-running: #8fd081;
+  --color-stage-results: #e7c86b;
+  --color-stage-decision: #f2986c;
+
+  --color-white: #2b3144;
+  --color-black: #10131c;
+
+  --color-stone-50: #2f3548;
+  --color-stone-100: #30374b;
+  --color-stone-200: #3a4157;
+  --color-stone-300: #4a526a;
+  --color-stone-400: #6c7592;
+  --color-stone-500: #8d94ab;
+  --color-stone-700: #d3cfc5;
+  --color-stone-800: #e1ddd3;
+  --color-stone-900: #ebe6dc;
+
+  --color-green-50: #27372f;
+  --color-green-100: #2d4437;
+  --color-green-200: #3d5e49;
+  --color-green-300: #4f7b5d;
+  --color-green-700: #9ad8a4;
+  --color-green-800: #addfb5;
+  --color-green-900: #c5ebcb;
+
+  --color-red-50: #3a2b33;
+  --color-red-100: #4a313b;
+  --color-red-200: #6c3f4a;
+  --color-red-300: #9a5560;
+  --color-red-700: #f4a3a8;
+  --color-red-800: #f6b2b6;
+  --color-red-900: #f9c8cb;
+
+  --color-amber-50: #3a3428;
+  --color-amber-100: #4a402a;
+  --color-amber-200: #6b5b35;
+  --color-amber-300: #8b7542;
+  --color-amber-700: #f0c674;
+  --color-amber-800: #f3d08b;
+  --color-amber-900: #f6dca7;
+
+  --color-yellow-100: #46422b;
+  --color-yellow-800: #ece08f;
+
+  --color-sky-100: #283f53;
+  --color-sky-800: #a3d2f1;
+
+  --color-violet-100: #3c3252;
+  --color-violet-800: #d1baf3;
+
+  --color-orange-50: #3b2f28;
+  --color-orange-100: #4c372b;
+  --color-orange-800: #f7bc93;
+  --color-orange-900: #f9cbab;
+}
+
+:root {
+  color-scheme: dark;
 }
 
 body {

@@ -28,12 +28,14 @@ const SCORES = [1, 2, 3, 4, 5].map((n) => ({ value: String(n), label: String(n) 
 
 export function Drawer({
   card,
+  focus,
   lists,
   siblings,
   onClose,
   onOpen,
 }: {
   card: BoardCard;
+  focus?: Stage; // the step that was clicked on the board, opened along with the current one
   lists: Lists;
   siblings: BoardCard[];
   onClose: () => void;
@@ -55,12 +57,12 @@ export function Drawer({
   ];
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-black/20" onClick={onClose}>
-      <aside className="h-full w-full max-w-xl overflow-y-auto bg-paper shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <div className="sticky top-0 z-10 border-b border-line bg-white px-5 py-3">
+    <div className="fixed inset-0 z-40 flex justify-end bg-black/40" onClick={onClose}>
+      <aside className="h-full w-full max-w-xl overflow-y-auto border-l border-line bg-paper shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="sticky top-0 z-10 border-b border-line bg-surface px-5 py-3">
           <div className="flex items-center gap-2">
             <Pill>{STAGE_LABELS[card.stage]}</Pill>
-            {card.decision && <Pill className="bg-stone-800 text-white">{card.decision}</Pill>}
+            {card.decision && <Pill className="bg-orange-100 text-orange-800">{card.decision}</Pill>}
             <SeedFlag tags={card.tags} />
             <Link href={`/experiments/${card.id}`} className="ml-auto text-xs text-muted hover:text-ink">
               Full page
@@ -90,11 +92,11 @@ export function Drawer({
         </div>
 
         <div className="px-5 py-4">
-          <GateBox card={card} />
+          <GateBox card={card} onOpen={onOpen} />
           {sections
             .filter((s) => STAGES.indexOf(s.stage) <= reached)
             .map((s) => (
-              <Section key={`${s.stage}-${card.stage}`} stage={s.stage} card={card}>
+              <Section key={`${s.stage}-${card.stage}`} stage={s.stage} card={card} startOpen={s.stage === card.stage || s.stage === focus}>
                 {s.body}
               </Section>
             ))}
@@ -119,11 +121,11 @@ export function Drawer({
 }
 
 /** One column's inputs. Starts open for the card's current column, collapsed for earlier ones. */
-function Section({ stage, card, children }: { stage: Stage; card: BoardCard; children: React.ReactNode }) {
-  const [open, setOpen] = useState(stage === card.stage);
+function Section({ stage, card, startOpen, children }: { stage: Stage; card: BoardCard; startOpen: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = useState(startOpen);
   const n = missingFor(stage, toGateCard(card)).length;
   return (
-    <section className="mb-3 rounded-lg border border-line bg-white">
+    <section className="mb-3 overflow-hidden rounded-lg border border-line bg-surface" style={{ borderLeft: `4px solid var(--color-stage-${stage})` }}>
       <button
         type="button"
         aria-expanded={open}
@@ -142,14 +144,17 @@ function Section({ stage, card, children }: { stage: Stage; card: BoardCard; chi
 }
 
 /** What it takes to move on, plus forward and back buttons. */
-function GateBox({ card }: { card: BoardCard }) {
+function GateBox({ card, onOpen }: { card: BoardCard; onOpen: (id: string) => void }) {
   const { run, pending } = useAction();
   const idx = STAGES.indexOf(card.stage);
   if (card.stage === "closed") {
     return (
       <div className="mb-4 rounded-lg border border-line bg-white p-3 text-sm">
-        This card is closed{card.closedAt ? ` (${fmtDate(card.closedAt)})` : ""}. It stays searchable.
-        <div className="mt-2">
+        This experiment is closed{card.closedAt ? ` (${fmtDate(card.closedAt)})` : ""}. It stays searchable.
+        <div className="mt-2 flex flex-wrap gap-2">
+          <Button kind="primary" onClick={() => run(() => A.createNextExperiment(card.id), (r) => r.ok && r.id && onOpen(r.id))} disabled={pending}>
+            Create next experiment
+          </Button>
           <Button onClick={() => run(() => A.moveCard(card.id, "decision"))} disabled={pending}>
             Reopen in Decision
           </Button>
@@ -165,7 +170,7 @@ function GateBox({ card }: { card: BoardCard }) {
     <div className={`mb-4 rounded-lg border p-3 text-sm ${missing.length ? "border-amber-200 bg-amber-50" : "border-green-200 bg-green-50"}`}>
       {missing.length ? (
         <>
-          <div className="font-medium">Before this card can move to {STAGE_LABELS[next]}:</div>
+          <div className="font-medium">Before this can expand into {STAGE_LABELS[next] ?? "closing"}:</div>
           <ul className="mt-1 list-disc pl-5">
             {missing.map((m) => (
               <li key={m}>{m}</li>
@@ -173,11 +178,11 @@ function GateBox({ card }: { card: BoardCard }) {
           </ul>
         </>
       ) : (
-        <div className="font-medium">Ready for {STAGE_LABELS[next]}.</div>
+        <div className="font-medium">{next === "closed" ? "Ready to close." : `Ready to expand into ${STAGE_LABELS[next]}.`}</div>
       )}
       <div className="mt-2 flex flex-wrap gap-2">
         <Button kind="primary" disabled={pending || !check.ok} onClick={() => run(() => A.moveCard(card.id, next))}>
-          {next === "closed" ? "Close card" : `Move to ${STAGE_LABELS[next]}`}
+          {next === "closed" ? "Close experiment" : `Expand into ${STAGE_LABELS[next]}`}
         </Button>
         {prev && (
           <Button disabled={pending} onClick={() => run(() => A.moveCard(card.id, prev))}>

@@ -100,6 +100,17 @@ export async function splitCard(id: string): Promise<Result> {
   return done(copy.id);
 }
 
+/** Loop back: a closed experiment starts a new one in Assumption with the same assumptions. */
+export async function createNextExperiment(id: string): Promise<Result> {
+  const card = await loadCard(id);
+  if (!card) return { ok: false, error: "Experiment not found." };
+  if (card.stage !== "closed") return { ok: false, error: "Close this experiment before starting the next one." };
+  const [next] = await db.insert(s.experiments).values({ title: `${card.title} (next)`, stage: "assumption" }).returning();
+  if (card.assumptions.length)
+    await db.insert(s.experimentAssumptions).values(card.assumptions.map((a) => ({ experimentId: next.id, assumptionId: a.id })));
+  return done(next.id);
+}
+
 // ---------- Assumptions ----------
 
 export async function linkAssumption(experimentId: string, assumptionId: string): Promise<Result> {

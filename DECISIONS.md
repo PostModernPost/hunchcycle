@@ -30,3 +30,10 @@ Choices made during the build that the brief didn't spell out.
 - **Split** copies assumptions and hypothesis fields into a new card titled "(variant)", sharing a `siblingGroup`. Only allowed in Hypothesis.
 - **Open card lives in the URL** (`/?card=<id>`), so a link or reload reopens it.
 - **Session pooler for the app connection (local).** postgres-js against Supabase's transaction pooler (port 6543) hangs forever when several queries run at once (reproduced with 15 parallel board loads, even with `max: 1`, `fetch_types: false`, and without `?pgbouncer=true`). The session pooler handled the same load in about a second. Revisit before deploying to Vercel, where the transaction pooler is the usual choice for serverless.
+
+## Milestone 2 revision (2026-10-22, Adam's feedback)
+
+- **Rows instead of moving cards.** Each experiment is one row; it fills in left to right as it reaches each column, showing a short summary of every finished step. Drag the current step into a later column to expand the row (same gates as before), or into an earlier column to move it back. Clicking a step opens the drawer with that section open.
+- **"Create next experiment" pulled forward from milestone 4.** A closed experiment (row or drawer) can start a new one in Assumption, titled "(next)", with the same assumptions linked. Adding assumptions spawned in Results is still milestone 4.
+- **One fixed dark palette, no theme switch.** Adam asked for a soft dark look; BRIEF section 11 rules out theming and dark mode as features, so there is no toggle. Each column has its own hue. Tailwind's color scales are remapped in `globals.css` (low shades dark, high shades light) so existing pill classes read correctly on dark. `@theme static` keeps every color variable in the CSS, since the stage colors are only used from inline styles.
+

@@ -27,7 +27,7 @@ export function useAction() {
 }
 
 export const inputCls =
-  "w-full rounded-md border border-line bg-white px-2 py-1.5 text-sm focus:border-stone-500 focus:outline-none disabled:bg-stone-50 disabled:text-muted";
+  "w-full rounded-md border border-line bg-paper px-2 py-1.5 text-sm placeholder:text-stone-400 focus:border-accent focus:outline-none disabled:bg-stone-50 disabled:text-muted";
 
 export function Label({ text, required, children }: { text: string; required?: boolean; children: React.ReactNode }) {
   return (
@@ -129,8 +129,8 @@ export function Button({
   type?: "button" | "submit";
 }) {
   const styles = {
-    primary: "bg-stone-900 text-white hover:bg-stone-700 disabled:bg-stone-300",
-    secondary: "border border-line bg-white hover:border-stone-400 disabled:text-muted",
+    primary: "bg-accent text-paper hover:brightness-110 disabled:bg-stone-300 disabled:text-muted",
+    secondary: "border border-line bg-raised hover:border-stone-400 disabled:text-muted",
     quiet: "text-muted hover:text-ink",
   }[kind];
   return (

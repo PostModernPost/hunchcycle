@@ -1,18 +1,24 @@
 "use client";
-// The board: columns from BRIEF section 4, drag and drop with gates, WIP warning, stale flag.
+// The board: one row per experiment. A row fills in left to right as the experiment moves
+// through the chain (BRIEF section 4). Drag the current step into a later column to expand
+// the row (gated), or into an earlier one to move it back. Click any step to open the drawer there.
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { DndContext, DragOverlay, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import type { BoardCard } from "@/lib/board-data";
-import { BOARD_STAGES, blockedMessage, checkMove, isStale, missingFor, toGateCard, type Stage } from "@/lib/gates";
+import { BOARD_STAGES, blockedMessage, checkMove, filled, isStale, missingFor, toGateCard, type Stage } from "@/lib/gates";
 import { fmtDate, STAGE_LABELS } from "@/lib/format";
 import { Pill, SeedFlag } from "@/components/ui";
-import { createCard, moveCard } from "@/app/actions";
+import { createCard, createNextExperiment, moveCard } from "@/app/actions";
 import { Drawer, type Lists } from "./Drawer";
 import { Button, inputCls, ToastContext, useAction } from "./fields";
 
 const WIP_LIMIT = 3;
+const STAGE_INDEX = Object.fromEntries(BOARD_STAGES.map((s, i) => [s, i])) as Record<Stage, number>;
+const GRID = { gridTemplateColumns: `250px repeat(${BOARD_STAGES.length}, 180px)` };
+export const stageColor = (s: Stage) => `var(--color-stage-${s === "closed" ? "decision" : s})`;
 
 type Props = { cards: BoardCard[]; lists: Lists; initialOpen?: string };
+type Opener = (id: string | null, focus?: Stage) => void;
 
 export function Board(props: Props) {
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -26,9 +32,9 @@ export function Board(props: Props) {
     <ToastContext.Provider value={toast}>
       <BoardInner {...props} />
       {toastMsg && (
-        <div role="alert" className="fixed bottom-4 left-1/2 z-50 max-w-lg -translate-x-1/2 rounded-lg bg-stone-900 px-4 py-3 text-sm text-white shadow-lg">
+        <div role="alert" className="fixed bottom-4 left-1/2 z-50 max-w-lg -translate-x-1/2 rounded-lg border border-line bg-raised px-4 py-3 text-sm shadow-lg">
           {toastMsg}
-          <button className="ml-3 text-stone-400 hover:text-white" onClick={() => setToastMsg(null)}>
+          <button className="ml-3 text-muted hover:text-ink" onClick={() => setToastMsg(null)}>
             Dismiss
           </button>
         </div>
@@ -40,7 +46,7 @@ export function Board(props: Props) {
 function BoardInner({ cards, lists, initialOpen }: Props) {
   const toast = useContext(ToastContext);
   const { run } = useAction();
-  const [openId, setOpenId] = useState<string | null>(initialOpen ?? null);
+  const [openState, setOpenState] = useState<{ id: string; focus?: Stage } | null>(initialOpen ? { id: initialOpen } : null);
   const [moved, setMoved] = useState<Record<string, Stage>>({}); // optimistic stage while a move saves
   const [dragId, setDragId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -49,28 +55,32 @@ function BoardInner({ cards, lists, initialOpen }: Props) {
   const now = useMemo(() => new Date(), []);
 
   // Keep the open card in the URL so a link or reload reopens it.
-  const open = (id: string | null) => {
-    setOpenId(id);
+  const open: Opener = (id, focus) => {
+    setOpenState(id ? { id, focus } : null);
     const url = new URL(window.location.href);
     if (id) url.searchParams.set("card", id);
     else url.searchParams.delete("card");
     window.history.replaceState(null, "", url);
   };
 
-  const stageOf = (c: BoardCard) => moved[c.id] ?? c.stage;
+  const withStage = (c: BoardCard) => ({ ...c, stage: moved[c.id] ?? c.stage });
   const q = query.trim().toLowerCase();
-  const matches = (c: BoardCard) => !q || c.title.toLowerCase().includes(q);
-  const closed = cards.filter((c) => stageOf(c) === "closed" && matches(c));
-  const openCard = cards.find((c) => c.id === openId) ?? null;
-  const dragCard = cards.find((c) => c.id === dragId) ?? null;
+  const visible = cards.map(withStage).filter((c) => !q || c.title.toLowerCase().includes(q));
+  // stale first, then furthest along, then oldest
+  const active = visible
+    .filter((c) => c.stage !== "closed")
+    .sort((a, b) => Number(isStale(b, now)) - Number(isStale(a, now)) || STAGE_INDEX[b.stage] - STAGE_INDEX[a.stage]);
+  const closed = visible.filter((c) => c.stage === "closed");
+  const running = active.filter((c) => c.stage === "running").length;
+  const openCard = cards.find((c) => c.id === openState?.id) ?? null;
+  const dragCard = visible.find((c) => c.id === dragId) ?? null;
 
-  // Check the gate before saving a drop, so a blocked card snaps back with a reason.
   const onDragEnd = (e: DragEndEvent) => {
     setDragId(null);
-    const card = cards.find((c) => c.id === e.active.id);
-    const to = e.over?.id as Stage | undefined;
-    if (!card || !to || to === stageOf(card)) return;
-    const check = checkMove(toGateCard({ ...card, stage: stageOf(card) }), to);
+    const card = visible.find((c) => c.id === e.active.id);
+    const [rowId, to] = String(e.over?.id ?? "").split("|") as [string, Stage];
+    if (!card || rowId !== card.id || !to || to === card.stage) return;
+    const check = checkMove(toGateCard(card), to);
     if (!check.ok) return toast(blockedMessage(check));
     setMoved((m) => ({ ...m, [card.id]: to }));
     run(
@@ -86,41 +96,44 @@ function BoardInner({ cards, lists, initialOpen }: Props) {
 
   return (
     <>
+      <Toolbar query={query} setQuery={setQuery} onCreated={(id) => open(id)} />
+      {running > WIP_LIMIT && (
+        <div className="mb-3 rounded-md bg-amber-100 px-3 py-2 text-sm text-amber-900">
+          {running} experiments are running. More than {WIP_LIMIT} at once makes it hard to learn from any of them.
+        </div>
+      )}
+
       {/* A fixed id keeps dnd-kit's generated ids the same on the server and in the browser. */}
       <DndContext id="board" sensors={sensors} onDragStart={(e) => setDragId(String(e.active.id))} onDragCancel={() => setDragId(null)} onDragEnd={onDragEnd}>
-        <Toolbar query={query} setQuery={setQuery} onCreated={open} />
-        <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-4">
-          {BOARD_STAGES.map((stage) => {
-            const col = cards
-              .filter((c) => stageOf(c) === stage && matches(c))
-              .sort((a, b) => Number(isStale(b, now)) - Number(isStale(a, now)));
-            return (
-              <Column key={stage} stage={stage} count={col.length}>
-                {col.map((c) => (
-                  <DraggableCard key={c.id} card={{ ...c, stage }} now={now} onOpen={() => open(c.id)} />
-                ))}
-              </Column>
-            );
-          })}
+        <div className="-mx-4 overflow-x-auto px-4 pb-4">
+          <div className="grid min-w-max gap-y-2" style={GRID}>
+            <HeaderRow />
+            {active.length === 0 && <div className="col-span-full py-6 text-sm text-muted">No experiments match.</div>}
+            {active.map((c) => (
+              <Row key={c.id} card={c} now={now} dragging={dragId === c.id} onOpen={open} />
+            ))}
+          </div>
         </div>
-        <DragOverlay>{dragCard && <CardFace card={dragCard} now={now} lifted />}</DragOverlay>
+        <DragOverlay dropAnimation={null}>
+          {dragCard && (
+            <div className="rounded-md border px-3 py-2 text-xs font-medium shadow-lg" style={{ borderColor: stageColor(dragCard.stage), background: "var(--color-raised)" }}>
+              Drag into a column to expand <span className="text-muted">{dragCard.title}</span>
+            </div>
+          )}
+        </DragOverlay>
       </DndContext>
 
       <div className="mt-4">
         <button className="text-sm text-muted hover:text-ink" onClick={() => setShowClosed(!showClosed)}>
-          {showClosed ? "Hide" : "Show"} closed cards ({closed.length})
+          {showClosed ? "Hide" : "Show"} closed experiments ({closed.length})
         </button>
         {showClosed && (
-          <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {closed.map((c) => (
-              <button key={c.id} onClick={() => open(c.id)} className="rounded-lg border border-line bg-white p-3 text-left hover:border-stone-400">
-                <div className="text-sm font-medium">{c.title}</div>
-                <div className="mt-1 flex flex-wrap items-center gap-2">
-                  {c.decision && <Pill>{c.decision}</Pill>}
-                  {c.closedAt && <span className="text-xs text-muted">closed {fmtDate(c.closedAt)}</span>}
-                </div>
-              </button>
-            ))}
+          <div className="-mx-4 mt-2 overflow-x-auto px-4 pb-4">
+            <div className="grid min-w-max gap-y-2" style={GRID}>
+              {closed.map((c) => (
+                <ClosedRow key={c.id} card={c} onOpen={open} />
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -129,6 +142,7 @@ function BoardInner({ cards, lists, initialOpen }: Props) {
         <Drawer
           key={openCard.id}
           card={openCard}
+          focus={openState?.focus}
           lists={lists}
           siblings={cards.filter((c) => c.siblingGroup && c.siblingGroup === openCard.siblingGroup && c.id !== openCard.id)}
           onClose={() => open(null)}
@@ -161,61 +175,263 @@ function Toolbar({ query, setQuery, onCreated }: { query: string; setQuery: (q: 
       >
         <input className={`${inputCls} w-64`} placeholder="New experiment title" value={title} onChange={(e) => setTitle(e.target.value)} />
         <Button type="submit" kind="primary" disabled={pending || !title.trim()}>
-          Add card
+          Add experiment
         </Button>
       </form>
-      <input className={`${inputCls} ml-auto w-56`} placeholder="Search cards" value={query} onChange={(e) => setQuery(e.target.value)} />
+      <input className={`${inputCls} ml-auto w-56`} placeholder="Search experiments" value={query} onChange={(e) => setQuery(e.target.value)} />
     </div>
   );
 }
 
-function Column({ stage, count, children }: { stage: Stage; count: number; children: React.ReactNode }) {
-  const { setNodeRef, isOver } = useDroppable({ id: stage });
-  const overWip = stage === "running" && count > WIP_LIMIT;
+function HeaderRow() {
   return (
-    <div ref={setNodeRef} className={`flex w-60 shrink-0 flex-col rounded-lg p-2 ${isOver ? "bg-stone-200" : "bg-stone-100"}`}>
-      <div className="mb-2 flex items-center justify-between px-1 text-xs font-semibold uppercase tracking-wide text-muted">
-        <span>{STAGE_LABELS[stage]}</span>
-        <span>{count}</span>
-      </div>
-      {overWip && (
-        <div className="mb-2 rounded-md bg-amber-100 px-2 py-1.5 text-xs text-amber-900">
-          {count} cards running. More than {WIP_LIMIT} at once makes it hard to learn from any of them.
+    <>
+      <div className="sticky left-0 z-10 bg-paper pr-3 text-xs font-semibold uppercase tracking-wide text-muted">Experiment</div>
+      {BOARD_STAGES.map((s) => (
+        <div key={s} className="flex items-center gap-1.5 px-3 text-xs font-semibold uppercase tracking-wide text-muted">
+          <span className="h-2 w-2 rounded-full" style={{ background: stageColor(s) }} />
+          {STAGE_LABELS[s]}
         </div>
-      )}
-      <div className="min-h-24 flex-1 space-y-2">{children}</div>
-    </div>
+      ))}
+    </>
   );
 }
 
-function DraggableCard({ card, now, onOpen }: { card: BoardCard; now: Date; onOpen: () => void }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: card.id });
+function TitleCell({ card: c, now, onOpen, children }: { card: BoardCard; now?: Date; onOpen: Opener; children?: React.ReactNode }) {
   return (
-    <div ref={setNodeRef} {...listeners} {...attributes} onClick={onOpen} className={isDragging ? "opacity-30" : ""}>
-      <CardFace card={card} now={now} />
+    <div className="sticky left-0 z-10 bg-paper pr-3">
+      <div className="h-full rounded-l-lg border-l-4 bg-surface p-3" style={{ borderLeftColor: stageColor(c.stage) }}>
+        <button className="text-left text-sm font-semibold leading-snug hover:underline" onClick={() => onOpen(c.id)}>
+          {c.title}
+        </button>
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {now && isStale(c, now) && <Pill className="bg-red-100 text-red-800">past report date</Pill>}
+          {c.siblingGroup && <Pill className="bg-sky-100 text-sky-800">split</Pill>}
+          <SeedFlag tags={c.tags} />
+        </div>
+        {children}
+      </div>
     </div>
   );
 }
 
-function CardFace({ card: c, now, lifted }: { card: BoardCard; now: Date; lifted?: boolean }) {
-  const stale = isStale(c, now);
+function Row({ card: c, now, dragging, onOpen }: { card: BoardCard; now: Date; dragging: boolean; onOpen: Opener }) {
+  const current = STAGE_INDEX[c.stage];
   const missing = missingFor(c.stage, toGateCard(c)).length;
   return (
-    <div className={`cursor-pointer rounded-md border bg-white p-3 ${stale ? "border-red-300" : "border-line"} ${lifted ? "rotate-1 shadow-lg" : "hover:border-stone-400"}`}>
-      <div className="text-sm font-medium leading-snug">{c.title}</div>
-      <div className="mt-2 flex flex-wrap gap-1">
-        {stale && <Pill className="bg-red-100 text-red-800">past report date</Pill>}
-        {c.siblingGroup && <Pill className="bg-sky-100 text-sky-800">split</Pill>}
-        <SeedFlag tags={c.tags} />
-      </div>
-      <div className="mt-2 text-xs text-muted">
-        {c.assumptions.length} assumption{c.assumptions.length === 1 ? "" : "s"}, {c.metrics.length} metric{c.metrics.length === 1 ? "" : "s"}, {c.runs.length} run
-        {c.runs.length === 1 ? "" : "s"}
-        {c.reportDate && <>. Report {fmtDate(c.reportDate)}</>}
-      </div>
-      <div className={`mt-1 text-xs ${missing ? "text-amber-700" : "text-green-700"}`}>
-        {missing ? `${missing} thing${missing === 1 ? "" : "s"} to fill before moving on` : "Ready to move on"}
-      </div>
+    <>
+      <TitleCell card={c} now={now} onOpen={onOpen}>
+        <div className={`mt-1.5 text-xs ${missing ? "text-amber-700" : "text-green-700"}`}>
+          {missing ? `${missing} to fill in ${STAGE_LABELS[c.stage]}` : `Ready to expand into ${STAGE_LABELS[BOARD_STAGES[current + 1]] ?? "closing"}`}
+        </div>
+      </TitleCell>
+      {BOARD_STAGES.map((s, i) =>
+        i < current ? (
+          <DoneCell key={s} card={c} stage={s} first={i === 0} onOpen={onOpen} />
+        ) : i === current ? (
+          <CurrentCell key={s} card={c} first={i === 0} onOpen={onOpen} />
+        ) : (
+          <FutureCell key={s} card={c} stage={s} dragging={dragging} next={i === current + 1} />
+        ),
+      )}
+    </>
+  );
+}
+
+function ClosedRow({ card: c, onOpen }: { card: BoardCard; onOpen: Opener }) {
+  const { run, pending } = useAction();
+  return (
+    <>
+      <TitleCell card={c} onOpen={onOpen}>
+        <div className="mt-1 text-xs text-muted">Closed {fmtDate(c.closedAt)}</div>
+        <div className="mt-2">
+          <Button disabled={pending} onClick={() => run(() => createNextExperiment(c.id), (r) => r.ok && r.id && onOpen(r.id))}>
+            Create next experiment
+          </Button>
+        </div>
+      </TitleCell>
+      {BOARD_STAGES.map((s, i) => (
+        <StepBody key={s} card={c} stage={s} first={i === 0} last={i === BOARD_STAGES.length - 1} onOpen={onOpen} dim />
+      ))}
+    </>
+  );
+}
+
+/** A filled step: tinted with its column's color, showing a short summary. */
+function StepBody({
+  card,
+  stage,
+  first,
+  last,
+  onOpen,
+  dim,
+  strong,
+  children,
+}: {
+  card: BoardCard;
+  stage: Stage;
+  first?: boolean;
+  last?: boolean;
+  onOpen: Opener;
+  dim?: boolean;
+  strong?: boolean;
+  children?: React.ReactNode;
+}) {
+  const color = stageColor(stage);
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpen(card.id, stage)}
+      onKeyDown={(e) => e.key === "Enter" && onOpen(card.id, stage)}
+      className={`h-full cursor-pointer border-y border-r border-line p-3 text-xs leading-relaxed hover:brightness-125 ${first ? "border-l" : ""} ${last ? "rounded-r-lg" : ""} ${dim ? "opacity-80" : ""}`}
+      style={{
+        background: `color-mix(in oklab, ${color} ${strong ? 26 : 14}%, var(--color-surface))`,
+        borderTopColor: strong ? color : undefined,
+        borderTopWidth: strong ? 2 : undefined,
+      }}
+    >
+      <Brief card={card} stage={stage} />
+      {children}
     </div>
   );
+}
+
+function DoneCell({ card, stage, first, onOpen }: { card: BoardCard; stage: Stage; first: boolean; onOpen: Opener }) {
+  const { setNodeRef, isOver } = useDroppable({ id: `${card.id}|${stage}` });
+  return (
+    <div ref={setNodeRef} className={isOver ? "outline outline-2 -outline-offset-2 outline-stone-400" : ""}>
+      <StepBody card={card} stage={stage} first={first} onOpen={onOpen} />
+    </div>
+  );
+}
+
+/** The step the experiment is on now. This is what you drag. */
+function CurrentCell({ card, first, onOpen }: { card: BoardCard; first: boolean; onOpen: Opener }) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: card.id });
+  const missing = missingFor(card.stage, toGateCard(card));
+  return (
+    <div ref={setNodeRef} {...listeners} {...attributes} className={`h-full ${isDragging ? "opacity-50" : ""}`} title="Click to open. Drag right to expand.">
+      <StepBody card={card} stage={card.stage} first={first} last onOpen={onOpen} strong>
+        <div className={`mt-2 flex items-center justify-between font-medium ${missing.length ? "text-amber-700" : "text-green-700"}`}>
+          <span>{missing.length ? `${missing.length} to fill` : "Ready"}</span>
+          <span className="text-base leading-none text-muted" aria-hidden>
+            ⋮⋮
+          </span>
+        </div>
+      </StepBody>
+    </div>
+  );
+}
+
+function FutureCell({ card, stage, dragging, next }: { card: BoardCard; stage: Stage; dragging: boolean; next: boolean }) {
+  const { setNodeRef, isOver } = useDroppable({ id: `${card.id}|${stage}` });
+  const check = dragging ? checkMove(toGateCard(card), stage) : null;
+  const color = stageColor(stage);
+  return (
+    <div ref={setNodeRef} className="h-full px-1">
+      {!dragging && next && (
+        <div className="flex h-full items-center justify-center rounded-md border border-dashed border-line p-2 text-center text-xs text-muted">
+          Drag here when ready
+        </div>
+      )}
+      {dragging && check && (
+        <div
+          className="flex h-full items-center justify-center rounded-md border-2 border-dashed p-2 text-center text-xs"
+          style={{
+            borderColor: check.ok ? color : "var(--color-red-300)",
+            background: isOver ? `color-mix(in oklab, ${check.ok ? color : "var(--color-red-300)"} 20%, transparent)` : undefined,
+            color: check.ok ? color : "var(--color-red-700)",
+          }}
+        >
+          {check.ok ? `Release to expand into ${STAGE_LABELS[stage]}` : `Locked until ${STAGE_LABELS[check.stage]} is filled in`}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Two or three lines summarizing one step of an experiment. */
+function Brief({ card: c, stage }: { card: BoardCard; stage: Stage }) {
+  const clamp = (s: string | null | undefined, n = 90) => (s && s.length > n ? s.slice(0, n).trimEnd() + "..." : s);
+  const none = <span className="text-muted">Nothing yet</span>;
+  switch (stage) {
+    case "assumption":
+      if (!c.assumptions.length) return none;
+      return (
+        <>
+          <p className="line-clamp-3">{c.assumptions[0].statement}</p>
+          {c.assumptions.length > 1 && <p className="mt-1 text-muted">plus {c.assumptions.length - 1} more</p>}
+        </>
+      );
+    case "hypothesis":
+      if (!filled(c.who) && !filled(c.action)) return none;
+      return (
+        <>
+          <p className="line-clamp-3">
+            {filled(c.who) ? c.who : "Someone"} will {filled(c.action) ? c.action!.charAt(0).toLowerCase() + c.action!.slice(1) : "..."}
+          </p>
+          <p className="mt-1 text-muted">
+            {[filled(c.howMany) && clamp(c.howMany, 30), filled(c.byWhen) && `by ${clamp(c.byWhen, 30)}`].filter(Boolean).join(", ")}
+          </p>
+        </>
+      );
+    case "experiment":
+      if (!c.method && !c.startDate) return none;
+      return (
+        <>
+          <p className="capitalize">{c.method?.replace("_", " ") ?? "No method"}</p>
+          {c.channel && <p className="line-clamp-1 text-muted">{c.channel}</p>}
+          <p className="mt-1 text-muted">
+            {c.startDate ? fmtDate(c.startDate) : "No start"} to {c.reportDate ? fmtDate(c.reportDate) : "no report date"}
+          </p>
+        </>
+      );
+    case "metrics":
+      if (!c.metrics.length) return none;
+      return (
+        <>
+          <p className="line-clamp-2">{c.metrics[0].name}</p>
+          {c.metrics.length > 1 && <p className="mt-1 text-muted">plus {c.metrics.length - 1} more</p>}
+        </>
+      );
+    case "running": {
+      const readings = c.metrics.reduce((n, m) => n + m.readings.length, 0);
+      const evidence = c.runs.reduce((n, r) => n + r.evidence.length, 0);
+      if (!c.runs.length && !readings) return none;
+      return (
+        <>
+          <p>
+            {c.runs.length} run{c.runs.length === 1 ? "" : "s"}, {evidence} evidence
+          </p>
+          <p className="text-muted">
+            {readings} reading{readings === 1 ? "" : "s"}
+          </p>
+        </>
+      );
+    }
+    case "results": {
+      const r = { pass: 0, fail: 0, unclear: 0 };
+      for (const m of c.metrics) if (m.result) r[m.result]++;
+      if (!r.pass && !r.fail && !r.unclear && !filled(c.rawLearnings)) return none;
+      return (
+        <>
+          <p>
+            {r.pass} pass, {r.fail} fail, {r.unclear} unclear
+          </p>
+          {filled(c.insights ?? c.rawLearnings) && <p className="mt-1 line-clamp-2 text-muted">{c.insights ?? c.rawLearnings}</p>}
+        </>
+      );
+    }
+    case "decision":
+      if (!c.decision) return none;
+      return (
+        <>
+          <p className="font-semibold capitalize">{c.decision}</p>
+          {c.decisionNote && <p className="mt-1 line-clamp-2 text-muted">{c.decisionNote}</p>}
+        </>
+      );
+    default:
+      return null;
+  }
 }

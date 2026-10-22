@@ -9,7 +9,7 @@ Adam Waitt (founder of Play Action) is building this to replace the Google Doc a
 ## Status
 
 - Milestone 1 is done: Drizzle schema (`src/db/schema.ts`), migrations (`drizzle/`), seed import (`scripts/seed.ts`), read-only list pages for experiments, assumptions, runs, people, interviews, scripts, and questions.
-- Milestone 2 is built, waiting for Adam to check it (2026-10-22): the board is the home page (`src/app/page.tsx`, `src/components/board/`). Drag and drop with dnd-kit, card drawer with progressive sections, stage gates (`src/lib/gates.ts`, enforced again in `src/app/actions.ts`), split from Hypothesis, WIP warning over 3 in Running, stale flag with stale cards sorted first, closed cards listed under the board and searchable.
+- Milestone 2 is built, waiting for Adam to check it (2026-10-22): the board is the home page (`src/app/page.tsx`, `src/components/board/`), one row per experiment that expands left to right (revised after Adam's first look). Drag and drop with dnd-kit, card drawer with progressive sections, "Create next experiment" on closed rows, stage gates (`src/lib/gates.ts`, enforced again in `src/app/actions.ts`), split from Hypothesis, WIP warning over 3 in Running, stale flag with stale cards sorted first, closed cards listed under the board and searchable.
 - Next after Adam signs off: Milestone 3 (BRIEF section 12).
 - Stop after each milestone, summarize what was built, and wait for Adam to check it before starting the next.
 
