@@ -14,20 +14,20 @@ Adam Waitt (founder of Play Action) is building this to replace the Google Doc a
 
 ## Open items to confirm with Adam
 
-- Did the Game Day Pilot actually launch? It's seeded as Running.
-- Did the Sprint 2 Google Ads test produce results? It's seeded as Running, past its report date.
+- Did the Sprint 2 Google Ads test produce results? It's seeded as Running, past its report date. Adam is checking (asked 2026-10-22).
 - All seeded assumptions and experiments carry the tag "seeded, review me". Importance and evidence scores were estimated.
 
 ## Running locally
 
 - Needs a Postgres database. Simplest on Adam's machine: use the Supabase project directly. Put its connection strings in `.env` (see `.env.example`): `DATABASE_URL` is the pooled string (port 6543, `?pgbouncer=true`), `DIRECT_URL` is the direct one (port 5432). Never commit `.env`.
 - `npm install`, `npm run db:migrate`, `npm run seed`, `npm run dev`.
+- Keep the project at a short path such as `C:\Users\adamw\hunchcycle`. A long folder path breaks `npm install` on Windows (esbuild's binary goes past the 260 character limit).
 - Seed files are NOT in the repo (real names and emails). They go in `seed/private/interviews.xlsx` and `seed/private/coaching-doc.docx`, which is gitignored. Adam has the originals ("Customer Interview Script (Responses).xlsx" and "Coaching - Adam Waitt.docx"). `npm run seed` wipes the database before loading.
 
 ## Infrastructure
 
 - GitHub: `PostModernPost/hunchcycle` (private), branch `main`.
-- Supabase: project ref `iumefduhzfimwiytqdcp` in the Hunchcycle org. Empty so far; migrations and seed have not been run against it.
+- Supabase: project ref `iumefduhzfimwiytqdcp` in the Hunchcycle org. Migrated and seeded 2026-10-22. The direct host (`db.<ref>.supabase.co`) is IPv6 only and doesn't work on Adam's network, so `DIRECT_URL` uses the session pooler (`aws-0-us-east-1.pooler.supabase.com:5432`, user `postgres.<ref>`). `DATABASE_URL` is the transaction pooler on port 6543.
 - Vercel: team "Adam Waitt's projects" (`team_Rg04dlv2tXWKdPDKgOFeU77S`). No project created yet. Deploy only when Adam says to (milestone 6). Env vars needed: `DATABASE_URL`, `DIRECT_URL`, `OWNER_PASSWORD`, `COACH_PASSWORD`, `SESSION_SECRET`.
 - Domains: hunchcycle.com and hunchcycle.app, bought on Squarespace. DNS will need to point at Vercel at deploy time.
 

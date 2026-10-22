@@ -506,13 +506,11 @@ async function main() {
     passLine: "10 by Oct 1", passDecision: "(not set)", killLine: "(not set)", killDecision: "(not set)",
   });
 
-  // 5. Game Day Pilot (running)
-  const nflRuns: string[] = [];
-  for (const w of [5, 6, 7, 8]) nflRuns.push((await R({ name: `Game Day Pilot: NFL Week ${w}`, notes: "Dates approximate. " + REVIEW })).id);
+  // 5. Game Day Pilot (not launched; Adam confirmed 2026-10-22 that group events ran instead)
   const pilot = await X(
     {
       title: "Game Day Pilot",
-      stage: "running",
+      stage: "experiment",
       who: "20 to 30 home sports fans (survey list, hot bar leads, 1 to 2 friend pods)",
       action: "Use Play Action during real NFL games and come back on their own",
       howMany: "See H1 to H4",
@@ -523,10 +521,9 @@ async function main() {
       sampleSizeTarget: 25,
       startDate: d("2026-10-01"),
       reportDate: d("2026-11-02"),
-      notes: "Unclear from the coaching doc whether this launched as designed. " + REVIEW,
+      notes: "Not launched as a home pilot (confirmed by Adam 2026-10-22). In-person group events ran instead: F45 Broncos on Oct 15, Groundfloor on Oct 29. Dates and recruiting need a fresh plan. " + REVIEW,
     },
     [a1.id, a4.id, a5.id],
-    nflRuns,
   );
   await M({ experimentId: pilot.id, order: 0, name: "H1: complete 1 full session (5+ moments) in week 1", type: "rate", source: "PostHog: moments fired vs completed",
     passLine: "60% or more", passDecision: "People will try it during a real game. Check H2.", killLine: "Under 40%", killDecision: "Onboarding or the in-game experience is broken. Fix it before any more recruiting." });
@@ -593,6 +590,7 @@ async function main() {
       becauseNote: gfBecause,
       method: "event",
       channel: "Face-to-face invites at Groundfloor",
+      startDate: d("2026-10-29"),
       notes: "Coach comment 2026-10-21: separate the top-of-funnel experiments from the actual test; get 10 to 15 more rows in the database first.",
     },
     [a1.id, a4.id, a9.id],
