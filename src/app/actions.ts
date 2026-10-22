@@ -24,11 +24,41 @@ const toInt = (v: unknown) => {
 
 // ---------- Cards ----------
 
-export async function createCard(title: string, assumptionId?: string): Promise<Result> {
-  if (!title.trim()) return { ok: false, error: "Give the experiment a title." };
-  const [row] = await db.insert(s.experiments).values({ title: title.trim(), stage: "assumption" }).returning();
+/** Next number for a type: Customer Interviews 1, 2, 3... */
+async function nextCycle(typeId: string) {
+  const [{ n }] = await db.select({ n: max(s.experiments.cycleNumber) }).from(s.experiments).where(eq(s.experiments.typeId, typeId));
+  return (n ?? 0) + 1;
+}
+
+export async function createCard(typeId: string, subtitle?: string, assumptionId?: string): Promise<Result> {
+  if (!typeId) return { ok: false, error: "Choose a type first." };
+  const [row] = await db
+    .insert(s.experiments)
+    .values({ typeId, cycleNumber: await nextCycle(typeId), title: toText(subtitle), stage: "assumption" })
+    .returning();
   if (assumptionId) await db.insert(s.experimentAssumptions).values({ experimentId: row.id, assumptionId });
   return done(row.id);
+}
+
+export async function createType(name: string, needsScript: boolean): Promise<Result> {
+  const clean = name.trim();
+  if (!clean) return { ok: false, error: "Give the type a name." };
+  const existing = (await db.select().from(s.experimentTypes)).find((t) => t.name.toLowerCase() === clean.toLowerCase());
+  if (existing) return done(existing.id);
+  const [row] = await db.insert(s.experimentTypes).values({ name: clean, needsScript }).returning();
+  return done(row.id);
+}
+
+/** Changing the type gives the experiment the next number in its new type. */
+export async function changeType(id: string, typeId: string): Promise<Result> {
+  const [e] = await db.select().from(s.experiments).where(eq(s.experiments.id, id));
+  if (!e) return { ok: false, error: "Experiment not found." };
+  if (!typeId || e.typeId === typeId) return { ok: true };
+  await db
+    .update(s.experiments)
+    .set({ typeId, cycleNumber: await nextCycle(typeId), updatedAt: new Date() })
+    .where(eq(s.experiments.id, id));
+  return done();
 }
 
 export async function moveCard(id: string, to: Stage): Promise<Result> {
@@ -58,7 +88,6 @@ const DECISIONS = s.decision.enumValues;
 export async function updateCard(id: string, field: string, value: unknown): Promise<Result> {
   let patch: Partial<typeof s.experiments.$inferInsert>;
   if ((TEXT_FIELDS as readonly string[]).includes(field)) {
-    if (field === "title" && !toText(value)) return { ok: false, error: "The title can't be empty." };
     patch = { [field]: toText(value) };
   } else if (field === "method") {
     patch = { method: METHODS.includes(value as never) ? (value as (typeof METHODS)[number]) : null };
@@ -87,7 +116,9 @@ export async function splitCard(id: string): Promise<Result> {
   const [copy] = await db
     .insert(s.experiments)
     .values({
-      title: `${card.title} (variant)`,
+      typeId: card.typeId,
+      cycleNumber: card.typeId ? await nextCycle(card.typeId) : null,
+      title: card.title ? `${card.title} (variant)` : "Variant",
       stage: "hypothesis",
       who: card.who,
       action: card.action,
@@ -102,12 +133,20 @@ export async function splitCard(id: string): Promise<Result> {
   return done(copy.id);
 }
 
-/** Loop back: a closed experiment starts a new one in Assumption with the same assumptions. */
+/** Loop back: a closed experiment starts the next cycle of its type in Assumption, with the same assumptions. */
 export async function createNextExperiment(id: string): Promise<Result> {
   const card = await loadCard(id);
   if (!card) return { ok: false, error: "Experiment not found." };
   if (card.stage !== "closed") return { ok: false, error: "Close this experiment before starting the next one." };
-  const [next] = await db.insert(s.experiments).values({ title: `${card.title} (next)`, stage: "assumption" }).returning();
+  const [next] = await db
+    .insert(s.experiments)
+    .values({
+      typeId: card.typeId,
+      cycleNumber: card.typeId ? await nextCycle(card.typeId) : null,
+      title: card.typeId ? null : `${card.title ?? "Experiment"} (next)`,
+      stage: "assumption",
+    })
+    .returning();
   if (card.assumptions.length)
     await db.insert(s.experimentAssumptions).values(card.assumptions.map((a) => ({ experimentId: next.id, assumptionId: a.id })));
   return done(next.id);

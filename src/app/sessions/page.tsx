@@ -1,14 +1,14 @@
 import Link from "next/link";
 import { db } from "@/db";
 import { Card, PageTitle, Pill } from "@/components/ui";
-import { fmtDate } from "@/lib/format";
+import { experimentName, fmtDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
 export default async function SessionsPage() {
   const rows = await db.query.runs.findMany({
     with: {
-      experiments: { with: { experiment: true } },
+      experiments: { with: { experiment: { with: { type: true } } } },
       evidence: { with: { interview: { with: { person: true } } } },
     },
   });
@@ -35,7 +35,7 @@ export default async function SessionsPage() {
               <div className="mt-2 flex flex-wrap gap-1">
                 {r.experiments.map(({ experiment: e }) => (
                   <Link key={e.id} href={`/experiments/${e.id}`}>
-                    <Pill className="bg-orange-50 text-orange-900 hover:bg-orange-100">{e.title}</Pill>
+                    <Pill className="bg-orange-50 text-orange-900 hover:bg-orange-100">{experimentName(e)}</Pill>
                   </Link>
                 ))}
                 {r.experiments.length > 1 && !r.interferenceChecked && (

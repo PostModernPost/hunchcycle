@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { db, schema as s } from "@/db";
 import { Card, Field, PageTitle, Pill, SeedFlag } from "@/components/ui";
-import { fmtDate, pct, STAGE_LABELS, STATUS_STYLES } from "@/lib/format";
+import { experimentName, experimentSubtitle, fmtDate, pct, STAGE_LABELS, STATUS_STYLES } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +12,7 @@ export default async function ExperimentDetail({ params }: { params: Promise<{ i
   const e = await db.query.experiments.findFirst({
     where: eq(s.experiments.id, id),
     with: {
+      type: true,
       assumptions: { with: { assumption: true } },
       metrics: { with: { readings: true }, orderBy: (m, { asc }) => [asc(m.order)] },
       runs: { with: { run: true } },
@@ -31,7 +32,7 @@ export default async function ExperimentDetail({ params }: { params: Promise<{ i
         {e.decision && <Pill className="bg-stone-800 text-white">{e.decision}</Pill>}
         <SeedFlag tags={e.tags} />
       </div>
-      <PageTitle title={e.title} />
+      <PageTitle title={experimentName(e)} sub={experimentSubtitle(e) ?? undefined} />
 
       <Section title="Assumptions tested">
         {e.assumptions.map(({ assumption: a }) => (
@@ -51,7 +52,7 @@ export default async function ExperimentDetail({ params }: { params: Promise<{ i
       </Section>
 
       <Section title="Experiment">
-        <Field label="Method" value={e.method} />
+        <Field label="Type" value={e.type?.name} />
         <Field label="Channel" value={e.channel} />
         <Field label="Sample size" value={e.sampleSizeTarget} />
         <Field label="Start" value={fmtDate(e.startDate)} />

@@ -5,21 +5,22 @@ import { useState } from "react";
 import Link from "next/link";
 import type { BoardCard } from "@/lib/board-data";
 import { blockedMessage, checkMove, filled, FLOW, missingFor, toGateCard, type Stage } from "@/lib/gates";
-import { fmtDate, pct, STAGE_LABELS, STATUS_STYLES } from "@/lib/format";
+import { experimentName, fmtDate, pct, STAGE_LABELS, STATUS_STYLES } from "@/lib/format";
 import { Pill, SeedFlag } from "@/components/ui";
 import * as A from "@/app/actions";
 import { Button, dateInput, inputCls, Label, SelectInput, TextInput, useAction } from "./fields";
+import { TypePicker, type ExperimentType } from "./TypePicker";
 
 export type Lists = {
   assumptions: { id: string; statement: string; status: string; category: string; importance: number; evidence: number }[];
   runs: { id: string; name: string; startDate: Date | null }[];
   scripts: { id: string; name: string; versionLabel: string }[];
+  types: ExperimentType[];
 };
 
 type Metric = BoardCard["metrics"][number];
 
 const opts = (xs: readonly string[]) => xs.map((x) => ({ value: x, label: x.replace("_", " ") }));
-const METHODS = ["interviews", "survey", "pilot", "landing_page", "event", "concierge", "other"] as const;
 const CATEGORIES = ["customer", "problem", "solution", "channel", "revenue", "other"] as const;
 const STATUSES = ["untested", "testing", "supported", "refuted", "retired"] as const;
 const EVIDENCE_TYPES = ["observation", "interview", "metric_reading", "survey_response", "other"] as const;
@@ -42,6 +43,7 @@ export function Drawer({
 }) {
   const { run } = useAction();
   const save = (field: string) => (v: string) => run(() => A.updateCard(card.id, field, v));
+  const name = experimentName(card);
   const reached = FLOW.indexOf(card.stage);
   const sectionProps = { card, lists, save };
 
@@ -78,11 +80,16 @@ export function Drawer({
               ×
             </button>
           </div>
-          <input
-            className="mt-2 w-full bg-transparent text-lg font-semibold focus:outline-none"
-            defaultValue={card.title}
-            onBlur={(e) => e.target.value !== card.title && save("title")(e.target.value)}
-          />
+          <div className="mt-2 flex items-center gap-2">
+            <h2 className="whitespace-nowrap text-lg font-semibold">{name}</h2>
+            <TypePicker
+              types={lists.types}
+              value={card.typeId}
+              onPick={(typeId) => run(() => A.changeType(card.id, typeId))}
+              className="ml-auto w-40 py-1 text-xs"
+            />
+          </div>
+          <SubtitleInput card={card} save={save("title")} className="bg-transparent px-0 text-sm text-muted" placeholder="Add a subtitle or MVP name" />
           {siblings.length > 0 && (
             <div className="mt-1 text-xs text-muted">
               Split from the same hypothesis as:{" "}
@@ -90,7 +97,7 @@ export function Drawer({
                 <span key={s.id}>
                   {i > 0 && ", "}
                   <button className="underline hover:text-ink" onClick={() => onOpen(s.id)}>
-                    {s.title}
+                    {experimentName(s)}
                   </button>
                 </span>
               ))}
@@ -313,12 +320,31 @@ function HypothesisSection({ card, save, onOpen }: SectionProps & { onOpen: (id:
 
 // ---------- Experiment ----------
 
+/** The subtitle and the MVP name are one field; it is editable in the header and in Test (MVP). */
+function SubtitleInput({ card, save, className = "", placeholder }: { card: BoardCard; save: (v: string) => void; className?: string; placeholder: string }) {
+  return (
+    <input
+      key={card.title ?? ""} // re-sync when the other copy of this field saves
+      className={`w-full focus:outline-none ${className}`}
+      defaultValue={card.title ?? ""}
+      placeholder={placeholder}
+      onBlur={(e) => e.target.value !== (card.title ?? "") && save(e.target.value)}
+    />
+  );
+}
+
 function ExperimentSection({ card, lists, save }: SectionProps) {
-  const needsScript = card.method === "interviews" || card.method === "survey";
+  const { run } = useAction();
+  const needsScript = !!card.type?.needsScript;
   return (
     <div>
+      <Label text="MVP name (shows as the subtitle)">
+        <SubtitleInput card={card} save={save("title")} className={inputCls} placeholder="e.g. Groundfloor MNF group class" />
+      </Label>
       <div className="grid grid-cols-2 gap-2">
-        <SelectInput label="Method" value={card.method} options={opts(METHODS)} onSave={save("method")} required />
+        <Label text="Type" required>
+          <TypePicker types={lists.types} value={card.typeId} onPick={(typeId) => run(() => A.changeType(card.id, typeId))} />
+        </Label>
         <TextInput label="Channel" value={card.channel} onSave={save("channel")} />
       </div>
       <div className="grid grid-cols-3 gap-2">
@@ -327,7 +353,7 @@ function ExperimentSection({ card, lists, save }: SectionProps) {
         <TextInput label="Report date" type="date" value={dateInput(card.reportDate)} onSave={save("reportDate")} required />
       </div>
       <SelectInput
-        label={needsScript ? "Script (needed for interviews and surveys)" : "Script"}
+        label={needsScript ? "Script (this type uses one)" : "Script"}
         value={card.scriptId}
         options={lists.scripts.map((s) => ({ value: s.id, label: `${s.name} ${s.versionLabel}` }))}
         onSave={save("scriptId")}

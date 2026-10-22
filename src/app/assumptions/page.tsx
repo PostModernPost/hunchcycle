@@ -1,15 +1,15 @@
 import Link from "next/link";
 import { db } from "@/db";
 import { Card, PageTitle, Pill, SeedFlag } from "@/components/ui";
-import { fmtDate, STATUS_STYLES } from "@/lib/format";
+import { experimentName, fmtDate, STATUS_STYLES } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
 export default async function AssumptionsPage() {
   const rows = await db.query.assumptions.findMany({
     with: {
-      experiments: { with: { experiment: true } },
-      history: { with: { experiment: true }, orderBy: (h, { asc }) => [asc(h.createdAt)] },
+      experiments: { with: { experiment: { with: { type: true } } } },
+      history: { with: { experiment: { with: { type: true } } }, orderBy: (h, { asc }) => [asc(h.createdAt)] },
     },
   });
   // riskiest first: high importance, low evidence
@@ -39,7 +39,7 @@ export default async function AssumptionsPage() {
                   <span key={e.id}>
                     {i > 0 && ", "}
                     <Link href={`/experiments/${e.id}`} className="hover:underline">
-                      {e.title}
+                      {experimentName(e)}
                     </Link>
                   </span>
                 ))}
@@ -51,7 +51,7 @@ export default async function AssumptionsPage() {
                   <li key={h.id}>
                     {fmtDate(h.createdAt)}
                     {h.toStatus && <> · now {h.toStatus}</>}
-                    {h.experiment && <> · {h.experiment.title}</>}: {h.note}
+                    {h.experiment && <> · {experimentName(h.experiment)}</>}: {h.note}
                   </li>
                 ))}
               </ul>

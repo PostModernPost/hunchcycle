@@ -17,7 +17,7 @@ export type GateCard = {
   howMany: string | null;
   byWhen: string | null;
   becauseNote: string | null;
-  method: string | null;
+  type: { needsScript: boolean } | null;
   startDate: Date | null;
   reportDate: Date | null;
   scriptId: string | null;
@@ -70,10 +70,10 @@ export function missingFor(stage: Stage, c: GateCard): string[] {
       if (c.assumptionIds.length === 0 && !filled(c.becauseNote)) out.push("Because");
       break;
     case "experiment":
-      if (!filled(c.method)) out.push("Method");
+      if (!c.type) out.push("Type");
       if (!c.startDate) out.push("Start date");
       if (!c.reportDate) out.push("Report date");
-      if ((c.method === "interviews" || c.method === "survey") && !c.scriptId) out.push("Script (needed for interviews and surveys)");
+      if (c.type?.needsScript && !c.scriptId) out.push("Script (this type uses an interview or survey script)");
       if (c.metrics.length === 0) out.push("At least one metric");
       for (const m of c.metrics) {
         const gaps = [

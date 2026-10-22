@@ -88,7 +88,7 @@ async function main() {
   await db.execute(sql`TRUNCATE
     answers, script_questions, interviews, evidence_metrics, reading_evidence, evidence,
     experiment_runs, runs, metric_readings, metrics, assumption_history, experiment_assumptions,
-    comments, weekly_briefs, open_questions, experiments, assumptions, scripts, questions, people
+    comments, weekly_briefs, open_questions, experiments, experiment_types, assumptions, scripts, questions, people
     CASCADE`);
 
   // ---- read sources ----
@@ -388,8 +388,41 @@ async function main() {
     .split("\n").map((l) => l.replace(/^[-•\s]+/, "").trim()).filter(Boolean);
   const gfBecause = L.find((l) => l.includes("At F45, both attendees completed every movement"))?.trim() ?? null;
 
+  // Experiment types (same starter list as drizzle/0001_experiment_types.sql). Seeded titles become subtitles.
+  const types = await db
+    .insert(s.experimentTypes)
+    .values(
+      [
+        ["Customer Interviews", true],
+        ["Survey", true],
+        ["Marketing", false],
+        ["Landing Page", false],
+        ["Feature", false],
+        ["Event", false],
+        ["Pilot", false],
+        ["Concierge", false],
+        ["Partnership", false],
+        ["Other", false],
+      ].map(([name, needsScript]) => ({ name: name as string, needsScript: needsScript as boolean })),
+    )
+    .returning();
+  const TYPE_OF: Record<string, string> = {
+    "Bar customer discovery interviews": "Customer Interviews",
+    "August survey": "Survey",
+    "Sprint 1: email sign-up from warm list": "Marketing",
+    "Sprint 2: Google Ads email sign-up": "Marketing",
+    "Game Day Pilot": "Pilot",
+    "In-person group exercise test v1 (F45 Broncos)": "Event",
+    "In-person group exercise test v2 (Groundfloor)": "Event",
+    "PT clinic side test": "Partnership",
+  };
+  const cycles: Record<string, number> = {};
+
   const X = async (v: typeof s.experiments.$inferInsert, assumptionIds: string[], runIds: string[] = []) => {
-    const [e] = await db.insert(s.experiments).values({ ...v, tags: [REVIEW] }).returning();
+    const typeName = TYPE_OF[v.title ?? ""] ?? "Other";
+    cycles[typeName] = (cycles[typeName] ?? 0) + 1;
+    const typeId = types.find((x) => x.name === typeName)!.id;
+    const [e] = await db.insert(s.experiments).values({ ...v, typeId, cycleNumber: cycles[typeName], tags: [REVIEW] }).returning();
     if (assumptionIds.length)
       await db.insert(s.experimentAssumptions).values(assumptionIds.map((assumptionId) => ({ experimentId: e.id, assumptionId })));
     if (runIds.length) await db.insert(s.experimentRuns).values(runIds.map((runId) => ({ experimentId: e.id, runId })));

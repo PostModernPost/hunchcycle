@@ -15,6 +15,19 @@ export const STAGE_LABELS: Record<string, string> = {
   closed: "Closed",
 };
 
+type Named = { title: string | null; cycleNumber: number | null; type?: { name: string } | null };
+
+/** "Customer Interviews 2". Falls back to the subtitle for an experiment with no type. */
+export function experimentName(e: Named): string {
+  if (e.type) return `${e.type.name} ${e.cycleNumber ?? ""}`.trim();
+  return e.title || "Untitled experiment";
+}
+
+/** The optional subtitle (also the MVP name), shown under the name. */
+export function experimentSubtitle(e: Named): string | null {
+  return e.type ? e.title : null;
+}
+
 export function pct(n: number | null | undefined, d: number | null | undefined): string {
   if (n == null || !d) return "";
   return `${Math.round((n / d) * 100)}%`;

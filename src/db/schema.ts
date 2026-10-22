@@ -104,11 +104,22 @@ export const assumptionHistory = pgTable("assumption_history", {
   createdAt: created(),
 });
 
-// ---------- Experiments (board cards) ----------
+// ---------- Experiments (board rows) ----------
+
+/** Kinds of test (Customer Interviews, Marketing, ...). Adam can add more. Replaces `method` in the UI. */
+export const experimentTypes = pgTable("experiment_types", {
+  id: id(),
+  name: text("name").notNull().unique(),
+  needsScript: boolean("needs_script").notNull().default(false), // interviews and surveys need a script
+  createdAt: created(),
+});
 
 export const experiments = pgTable("experiments", {
   id: id(),
-  title: text("title").notNull(),
+  // Shown as "<type> <cycleNumber>", e.g. "Customer Interviews 2". `title` is the optional subtitle / MVP name.
+  typeId: text("type_id").references(() => experimentTypes.id, { onDelete: "set null" }),
+  cycleNumber: integer("cycle_number"),
+  title: text("title"),
   stage: stage("stage").notNull().default("assumption"),
   // hypothesis
   who: text("who"),
@@ -116,7 +127,7 @@ export const experiments = pgTable("experiments", {
   howMany: text("how_many"),
   byWhen: text("by_when"),
   becauseNote: text("because_note"),
-  // design
+  // design (method is kept for old data; the type replaced it in the UI)
   method: method("method"),
   channel: text("channel"),
   sampleSizeTarget: integer("sample_size_target"),
@@ -384,7 +395,11 @@ export const assumptionHistoryRelations = relations(assumptionHistory, ({ one })
   assumption: one(assumptions, { fields: [assumptionHistory.assumptionId], references: [assumptions.id] }),
   experiment: one(experiments, { fields: [assumptionHistory.experimentId], references: [experiments.id] }),
 }));
+export const experimentTypesRelations = relations(experimentTypes, ({ many }) => ({
+  experiments: many(experiments),
+}));
 export const experimentsRelations = relations(experiments, ({ many, one }) => ({
+  type: one(experimentTypes, { fields: [experiments.typeId], references: [experimentTypes.id] }),
   assumptions: many(experimentAssumptions),
   metrics: many(metrics),
   runs: many(experimentRuns),

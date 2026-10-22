@@ -7,6 +7,7 @@ async function query(id?: string) {
   const rows = await db.query.experiments.findMany({
     where: id ? eq(s.experiments.id, id) : undefined,
     with: {
+      type: true,
       assumptions: { with: { assumption: true } },
       metrics: { with: { readings: { orderBy: (r, { asc }) => [asc(r.date)] } }, orderBy: (m, { asc }) => [asc(m.order)] },
       runs: { with: { run: { with: { evidence: true } } } },

@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 export default async function BoardPage({ searchParams }: { searchParams: Promise<{ card?: string; view?: string }> }) {
   const { card, view } = await searchParams;
-  const [cards, assumptions, runs, scripts] = await Promise.all([
+  const [cards, assumptions, runs, scripts, types] = await Promise.all([
     loadCards(),
     db
       .select({
@@ -20,11 +20,12 @@ export default async function BoardPage({ searchParams }: { searchParams: Promis
       .from(s.assumptions),
     db.select({ id: s.runs.id, name: s.runs.name, startDate: s.runs.startDate }).from(s.runs),
     db.select({ id: s.scripts.id, name: s.scripts.name, versionLabel: s.scripts.versionLabel }).from(s.scripts),
+    db.select({ id: s.experimentTypes.id, name: s.experimentTypes.name, needsScript: s.experimentTypes.needsScript }).from(s.experimentTypes).orderBy(s.experimentTypes.name),
   ]);
   return (
     <div>
       <h1 className="mb-4 text-2xl font-semibold tracking-tight">Board</h1>
-      <Board cards={cards} lists={{ assumptions, runs, scripts }} initialOpen={card} initialView={view === "assumptions" ? "assumptions" : "list"} />
+      <Board cards={cards} lists={{ assumptions, runs, scripts, types }} initialOpen={card} initialView={view === "assumptions" ? "assumptions" : "list"} />
     </div>
   );
 }

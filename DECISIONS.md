@@ -45,3 +45,11 @@ Choices made during the build that the brief didn't spell out.
 - **Group by assumption** is a switch on the board (`?view=assumptions`), on trial; Adam may revert it. One band per assumption, riskiest first (importance high, evidence low). Each experiment appears once, under its riskiest linked assumption, with "Also tests" links to the others. Rows in a band are in the order they were started, so repeated cycles read top to bottom. "Show closed" puts closed experiments inline in their bands. Assumptions with no experiment are listed at the bottom, each with "+ New experiment", which creates an experiment already linked to it.
 - **Seeded placeholders** starting with "(not set" (including "(not set in doc) ...") count as empty.
 
+## Experiment types (2026-10-22, Adam's choices)
+
+- **Rows are named by type and cycle number**, e.g. "Customer Interviews 2". Types live in `experiment_types` (starter list in `drizzle/0001_experiment_types.sql`; Adam can add more from any type dropdown). Each type has a `needsScript` flag that replaces the old interviews/survey script rule.
+- **The type replaces the Method dropdown** in the UI. It can be changed any time (panel header or Test (MVP)); changing it gives the experiment the next number in the new type. The old `method` column is kept for history but not shown.
+- **One subtitle field.** `experiments.title` is now the optional subtitle, which is also the MVP name in Test (MVP). Seeded titles became subtitles.
+- **Numbering** counts up within a type in creation order. "Start next cycle" (was "Create next experiment") and Split both take the next number in the same type.
+- **Seeded mapping** (Adam unsure, reversible since types are editable): bar interviews to Customer Interviews 1, August survey to Survey 1, Sprints 1 and 2 to Marketing 1 and 2, F45 and Groundfloor to Event 1 and 2, Game Day Pilot to Pilot 1, PT clinic to Partnership 1. Adam's own new bar interviews row became Customer Interviews 2.
+
