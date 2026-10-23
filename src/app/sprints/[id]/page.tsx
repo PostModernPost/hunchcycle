@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { db, schema as s } from "@/db";
 import { Card, Field, PageTitle, Pill, SeedFlag } from "@/components/ui";
+import { Comments } from "@/components/Comments";
 import { experimentName, experimentSubtitle, fmtDate, pct, STAGE_LABELS, STATUS_STYLES } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +21,7 @@ export default async function SprintDetail({ params }: { params: Promise<{ id: s
       },
       runs: { with: { run: true } },
       script: true,
-      comments: true,
+      comments: { orderBy: (c, { asc }) => [asc(c.createdAt)] },
     },
   });
   if (!e) notFound();
@@ -136,18 +137,9 @@ export default async function SprintDetail({ params }: { params: Promise<{ id: s
         <Field label="Note" value={e.decisionNote} />
       </Section>
 
-      {e.comments.length > 0 && (
-        <Section title="Comments">
-          {e.comments.map((c) => (
-            <Card key={c.id} className="mb-2 text-sm">
-              <div className="text-xs text-muted">
-                {c.authorName ?? c.role} · {fmtDate(c.createdAt)}
-              </div>
-              <div className="mt-1">{c.body}</div>
-            </Card>
-          ))}
-        </Section>
-      )}
+      <section className="mb-6">
+        <Comments comments={e.comments} experimentId={e.id} />
+      </section>
     </div>
   );
 }

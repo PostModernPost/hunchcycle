@@ -4,6 +4,7 @@ import { createContext, useContext, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { filled } from "@/lib/gates";
 import { inputCls } from "@/components/styles";
+import { useReadOnly } from "@/components/Role";
 
 type ActionResult = { ok: true; id?: string } | { ok: false; error: string };
 
@@ -69,10 +70,11 @@ export function TextInput({
     setSaved(v);
     onSave(v);
   };
+  const readOnly = useReadOnly();
   const common = {
     defaultValue: initial,
     placeholder: placeholder ?? (required ? "Required" : ""),
-    disabled,
+    disabled: disabled || readOnly,
     className: inputCls,
   };
   return (
@@ -101,9 +103,10 @@ export function SelectInput({
   required?: boolean;
   blank?: string;
 }) {
+  const readOnly = useReadOnly();
   return (
     <Label text={label} required={required}>
-      <select className={inputCls} defaultValue={value ?? ""} onChange={(e) => onSave(e.target.value)}>
+      <select disabled={readOnly} className={inputCls} defaultValue={value ?? ""} onChange={(e) => onSave(e.target.value)}>
         <option value="">{blank}</option>
         {options.map((o) => (
           <option key={o.value} value={o.value}>
@@ -121,20 +124,23 @@ export function Button({
   disabled,
   kind = "secondary",
   type = "button",
+  forCoach = false,
 }: {
   children: React.ReactNode;
   onClick?: () => void;
   disabled?: boolean;
   kind?: "primary" | "secondary" | "quiet";
   type?: "button" | "submit";
+  forCoach?: boolean; // true for the few buttons the coach can use, like posting a comment
 }) {
+  const readOnly = useReadOnly() && !forCoach;
   const styles = {
     primary: "bg-accent text-paper hover:brightness-110 disabled:bg-stone-300 disabled:text-muted",
     secondary: "border border-line bg-raised hover:border-stone-400 disabled:text-muted",
     quiet: "text-muted hover:text-ink",
   }[kind];
   return (
-    <button type={type} onClick={onClick} disabled={disabled} className={`whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${styles}`}>
+    <button type={type} onClick={onClick} disabled={disabled || readOnly} className={`whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${styles}`}>
       {children}
     </button>
   );
@@ -143,6 +149,7 @@ export function Button({
 /** A quiet "+ label" button that opens a form only when it is needed. */
 export function Reveal({ label, children }: { label: string; children: (close: () => void) => React.ReactNode }) {
   const [open, setOpen] = useState(false);
+  if (useReadOnly()) return null; // every Reveal opens an editing form
   if (!open)
     return (
       <button type="button" className="mt-1 text-sm text-accent hover:brightness-110" onClick={() => setOpen(true)}>

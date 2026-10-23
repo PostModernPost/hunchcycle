@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db, schema as s } from "@/db";
+import { ownerOnly } from "@/lib/auth";
 import { toInt, toList, toText, type Result } from "@/lib/parse";
 
 const done = (id?: string): Result => {
@@ -11,6 +12,8 @@ const done = (id?: string): Result => {
 };
 
 export async function createPerson(v: { name: string; channelFound?: string }): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   if (!v.name.trim()) return { ok: false, error: "Give the person a name." };
   const [p] = await db.insert(s.people).values({ name: v.name.trim(), channelFound: toText(v.channelFound) }).returning();
   return done(p.id);
@@ -19,6 +22,8 @@ export async function createPerson(v: { name: string; channelFound?: string }): 
 const TEXT = ["name", "gender", "location", "contact", "channelFound", "platform", "fantasy", "bettor", "whereToFindOthers", "notes"] as const;
 
 export async function updatePerson(id: string, field: string, value: unknown): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   let patch: Partial<typeof s.people.$inferInsert>;
   if ((TEXT as readonly string[]).includes(field)) {
     if (field === "name" && !toText(value)) return { ok: false, error: "The person needs a name." };

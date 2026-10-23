@@ -5,6 +5,7 @@ import { db, schema as s } from "@/db";
 import { Card, PageTitle, Pill } from "@/components/ui";
 import { PersonForm } from "@/components/people/PersonForm";
 import { fmtDate, HEAT_STYLES } from "@/lib/format";
+import { getRole } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,7 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
   });
   if (!p) notFound();
   const { interviews, ...person } = p;
+  const isOwner = (await getRole()) === "owner";
 
   return (
     <div className="max-w-3xl">
@@ -47,9 +49,11 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
           </Card>
         ))}
       </div>
-      <Link href={`/interviews/new?person=${p.id}`} className="text-sm text-accent hover:brightness-110">
-        + New interview with {p.name}
-      </Link>
+      {isOwner && (
+        <Link href={`/interviews/new?person=${p.id}`} className="text-sm text-accent hover:brightness-110">
+          + New interview with {p.name}
+        </Link>
+      )}
 
       <h2 className="mb-2 mt-8 text-sm font-semibold uppercase tracking-wide text-muted">Details</h2>
       <Card>

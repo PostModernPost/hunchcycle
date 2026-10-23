@@ -4,6 +4,7 @@
 import { revalidatePath } from "next/cache";
 import { count, eq, max } from "drizzle-orm";
 import { db, schema as s } from "@/db";
+import { ownerOnly } from "@/lib/auth";
 import { toList, toText, type Result } from "@/lib/parse";
 
 const done = (id?: string): Result => {
@@ -17,6 +18,8 @@ async function lockedMessage(scriptId: string) {
 }
 
 export async function createScript(name: string): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   if (!name.trim()) return { ok: false, error: "Give the script a name." };
   const [x] = await db.insert(s.scripts).values({ name: name.trim(), versionLabel: "v1" }).returning();
   return done(x.id);
@@ -24,6 +27,8 @@ export async function createScript(name: string): Promise<Result> {
 
 /** Copy a script to the next version of the same name (v1 to v2), keeping question order and wording. */
 export async function copyToNewVersion(id: string): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   const [src] = await db.select().from(s.scripts).where(eq(s.scripts.id, id));
   if (!src) return { ok: false, error: "Script not found." };
   const siblings = await db.select({ v: s.scripts.versionLabel }).from(s.scripts).where(eq(s.scripts.name, src.name));
@@ -36,6 +41,8 @@ export async function copyToNewVersion(id: string): Promise<Result> {
 }
 
 export async function updateScript(id: string, field: string, value: unknown): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   if (field === "name" || field === "versionLabel") {
     if (!toText(value)) return { ok: false, error: "This can't be empty." };
     await db.update(s.scripts).set({ [field]: String(value).trim() }).where(eq(s.scripts.id, id));
@@ -51,6 +58,8 @@ async function append(scriptId: string, questionId: string) {
 }
 
 export async function addQuestionToScript(scriptId: string, questionId: string): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   const locked = await lockedMessage(scriptId);
   if (locked) return { ok: false, error: locked };
   await append(scriptId, questionId);
@@ -59,6 +68,8 @@ export async function addQuestionToScript(scriptId: string, questionId: string):
 
 /** Adds a brand new question to the bank and to this script. */
 export async function addNewQuestionToScript(scriptId: string, text: string): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   if (!text.trim()) return { ok: false, error: "Write the question first." };
   const locked = await lockedMessage(scriptId);
   if (locked) return { ok: false, error: locked };
@@ -68,6 +79,8 @@ export async function addNewQuestionToScript(scriptId: string, text: string): Pr
 }
 
 export async function removeFromScript(scriptQuestionId: string): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   const [sq] = await db.select().from(s.scriptQuestions).where(eq(s.scriptQuestions.id, scriptQuestionId));
   if (!sq) return { ok: false, error: "Question not found in this script." };
   const locked = await lockedMessage(sq.scriptId);
@@ -78,6 +91,8 @@ export async function removeFromScript(scriptQuestionId: string): Promise<Result
 
 /** Swap a question with its neighbor above or below. */
 export async function moveInScript(scriptQuestionId: string, dir: "up" | "down"): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   const [sq] = await db.select().from(s.scriptQuestions).where(eq(s.scriptQuestions.id, scriptQuestionId));
   if (!sq) return { ok: false, error: "Question not found in this script." };
   const locked = await lockedMessage(sq.scriptId);
@@ -94,6 +109,8 @@ export async function moveInScript(scriptQuestionId: string, dir: "up" | "down")
 
 /** Wording for this script only. The question keeps its identity in the bank, so answers stay comparable. */
 export async function setWording(scriptQuestionId: string, text: string): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   const [sq] = await db.select().from(s.scriptQuestions).where(eq(s.scriptQuestions.id, scriptQuestionId));
   if (!sq) return { ok: false, error: "Question not found in this script." };
   const locked = await lockedMessage(sq.scriptId);
@@ -107,12 +124,16 @@ export async function setWording(scriptQuestionId: string, text: string): Promis
 // ---------- question bank ----------
 
 export async function createQuestion(text: string, tags: string): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   if (!text.trim()) return { ok: false, error: "Write the question first." };
   const [q] = await db.insert(s.questions).values({ text: text.trim(), tags: toList(tags) }).returning();
   return done(q.id);
 }
 
 export async function updateQuestion(id: string, field: "text" | "tags", value: string): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   if (field === "text") {
     if (!value.trim()) return { ok: false, error: "The question can't be empty." };
     await db.update(s.questions).set({ text: value.trim() }).where(eq(s.questions.id, id));

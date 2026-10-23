@@ -7,6 +7,7 @@ import { Button, dateInput, inputCls, Label, Reveal, TextInput, useAction } from
 import { addEvidence, linkRun, unlinkRun } from "@/app/actions";
 import { createSession, deleteEvidence, toggleEvidenceMetric, updateEvidence, updateSession } from "@/app/sessions/actions";
 import { fmtDate } from "@/lib/format";
+import { EditArea, useReadOnly } from "@/components/Role";
 
 export type SessionData = {
   id: string;
@@ -35,130 +36,149 @@ export function SessionCard({ session: r, allSprints }: { session: SessionData; 
 
   return (
     <Card className="scroll-mt-4">
-      <div id={r.id} className="flex flex-wrap items-baseline justify-between gap-2">
-        <div className="font-medium">{r.name}</div>
-        <div className="text-xs text-muted">
-          {[fmtDate(r.startDate) + (r.endDate ? ` to ${fmtDate(r.endDate)}` : ""), r.location, r.runBy && `run by ${r.runBy}`].filter(Boolean).join(", ")}
+      <EditArea>
+        <div id={r.id} className="flex flex-wrap items-baseline justify-between gap-2">
+          <div className="font-medium">{r.name}</div>
+          <div className="text-xs text-muted">
+            {[fmtDate(r.startDate) + (r.endDate ? ` to ${fmtDate(r.endDate)}` : ""), r.location, r.runBy && `run by ${r.runBy}`].filter(Boolean).join(", ")}
+          </div>
         </div>
-      </div>
-      {r.notes && <div className="mt-1 whitespace-pre-wrap text-sm text-muted">{r.notes}</div>}
-      {r.recordingLinks.length > 0 && (
-        <div className="mt-1 flex flex-wrap gap-2 text-xs">
-          {r.recordingLinks.map((l) => (
-            <a key={l} href={l} target="_blank" rel="noreferrer" className="text-accent underline">
-              Recording
-            </a>
-          ))}
-        </div>
-      )}
-
-      <Reveal label="Edit details">
-        {() => (
-          <div>
-            <TextInput label="Name" value={r.name} onSave={save("name")} required />
-            <div className="grid grid-cols-2 gap-2">
-              <TextInput label="Date (or first day)" type="date" value={dateInput(r.startDate)} onSave={save("startDate")} />
-              <TextInput label="Last day (for multi-day sessions)" type="date" value={dateInput(r.endDate)} onSave={save("endDate")} />
-              <TextInput label="Location" value={r.location} onSave={save("location")} />
-              <TextInput label="Run by" value={r.runBy} onSave={save("runBy")} />
-            </div>
-            <TextInput label="Notes" value={r.notes} onSave={save("notes")} multiline />
-            <TextInput label="Recording links (one per line)" value={r.recordingLinks.join("\n")} onSave={save("recordingLinks")} multiline />
+        {r.notes && <div className="mt-1 whitespace-pre-wrap text-sm text-muted">{r.notes}</div>}
+        {r.recordingLinks.length > 0 && (
+          <div className="mt-1 flex flex-wrap gap-2 text-xs">
+            {r.recordingLinks.map((l) => (
+              <a key={l} href={l} target="_blank" rel="noreferrer" className="text-accent underline">
+                Recording
+              </a>
+            ))}
           </div>
         )}
-      </Reveal>
 
-      {/* sprints */}
-      <div className="mt-3 flex flex-wrap items-center gap-1">
-        <span className="mr-1 text-xs text-muted">Sprints:</span>
-        {r.sprints.length === 0 && <span className="text-xs text-muted">none yet</span>}
-        {r.sprints.map((x) => (
-          <Pill key={x.id} className="bg-orange-50 text-orange-900">
-            <Link href={`/sprints/${x.id}`} className="hover:underline">
-              {x.name}
-            </Link>
-            <button className="ml-1 text-muted hover:text-red-700" aria-label={`Unlink ${x.name}`} onClick={() => run(() => unlinkRun(x.id, r.id))}>
-              ×
-            </button>
-          </Pill>
-        ))}
-        <select
-          className={`${inputCls.replace("w-full ", "")} w-48 py-0.5 text-xs`}
-          value=""
-          onChange={(e) => e.target.value && run(() => linkRun(e.target.value, r.id))}
-          aria-label="Link a sprint"
-        >
-          <option value="">+ Link a sprint</option>
-          {allSprints
-            .filter((x) => !linked.has(x.id))
-            .map((x) => (
-              <option key={x.id} value={x.id}>
-                {x.name}
-              </option>
-            ))}
-        </select>
-      </div>
-
-      {/* interference check (BRIEF section 5) */}
-      {r.sprints.length > 1 && (
-        <div className={`mt-3 rounded-md p-3 text-sm ${r.interferenceChecked ? "bg-green-50" : "bg-yellow-100"}`}>
-          <div className="font-medium">Could these sprints affect each other&apos;s results?</div>
-          <p className="mt-0.5 text-xs text-muted">
-            For example, asking for payment at the same event where you measure enjoyment can lower the enjoyment scores.
-          </p>
-          <label className="mt-2 flex items-center gap-2">
-            <input type="checkbox" checked={r.interferenceChecked} onChange={(e) => run(() => updateSession(r.id, "interferenceChecked", e.target.checked))} />
-            We checked, and either they don&apos;t, or we accounted for it
-          </label>
-          <div className="mt-2">
-            <TextInput label="How (optional)" value={r.interferenceNote} onSave={save("interferenceNote")} />
-          </div>
-        </div>
-      )}
-
-      {/* evidence */}
-      <h3 className="mb-1 mt-4 text-xs font-semibold uppercase tracking-wide text-muted">Evidence ({r.evidence.length})</h3>
-      <div className="space-y-2">
-        {r.evidence.map((e) => (
-          <EvidenceItem key={e.id} evidence={e} metrics={metrics} />
-        ))}
-      </div>
-      <div className="mt-2 flex flex-wrap gap-4">
-        <Reveal label="Add evidence">
-          {(close) => (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                run(
-                  () => addEvidence(r.id, ev),
-                  (res) => {
-                    if (res.ok) {
-                      setEv({ ...ev, summary: "" });
-                      close();
-                    }
-                  },
-                );
-              }}
-            >
-              <select className={inputCls} value={ev.type} onChange={(e) => setEv({ ...ev, type: e.target.value })}>
-                {EVIDENCE_TYPES.filter((t) => t !== "interview").map((t) => (
-                  <option key={t} value={t}>
-                    {label(t)}
-                  </option>
-                ))}
-              </select>
-              <textarea className={`${inputCls} mt-2`} rows={3} placeholder="What you saw or heard" value={ev.summary} onChange={(e) => setEv({ ...ev, summary: e.target.value })} />
-              <Button type="submit" disabled={pending || !ev.summary.trim()}>
-                Add evidence
-              </Button>
-            </form>
+        <Reveal label="Edit details">
+          {() => (
+            <div>
+              <TextInput label="Name" value={r.name} onSave={save("name")} required />
+              <div className="grid grid-cols-2 gap-2">
+                <TextInput label="Date (or first day)" type="date" value={dateInput(r.startDate)} onSave={save("startDate")} />
+                <TextInput label="Last day (for multi-day sessions)" type="date" value={dateInput(r.endDate)} onSave={save("endDate")} />
+                <TextInput label="Location" value={r.location} onSave={save("location")} />
+                <TextInput label="Run by" value={r.runBy} onSave={save("runBy")} />
+              </div>
+              <TextInput label="Notes" value={r.notes} onSave={save("notes")} multiline />
+              <TextInput label="Recording links (one per line)" value={r.recordingLinks.join("\n")} onSave={save("recordingLinks")} multiline />
+            </div>
           )}
         </Reveal>
-        <Link href={`/interviews/new?session=${r.id}`} className="mt-1 text-sm text-accent hover:brightness-110">
-          + Add an interview
-        </Link>
-      </div>
+
+        {/* sprints */}
+        <div className="mt-3 flex flex-wrap items-center gap-1">
+          <span className="mr-1 text-xs text-muted">Sprints:</span>
+          {r.sprints.length === 0 && <span className="text-xs text-muted">none yet</span>}
+          {r.sprints.map((x) => (
+            <Pill key={x.id} className="bg-orange-50 text-orange-900">
+              <Link href={`/sprints/${x.id}`} className="hover:underline">
+                {x.name}
+              </Link>
+              <button className="ml-1 text-muted hover:text-red-700" aria-label={`Unlink ${x.name}`} onClick={() => run(() => unlinkRun(x.id, r.id))}>
+                ×
+              </button>
+            </Pill>
+          ))}
+          <select
+            className={`${inputCls.replace("w-full ", "")} w-48 py-0.5 text-xs`}
+            value=""
+            onChange={(e) => e.target.value && run(() => linkRun(e.target.value, r.id))}
+            aria-label="Link a sprint"
+          >
+            <option value="">+ Link a sprint</option>
+            {allSprints
+              .filter((x) => !linked.has(x.id))
+              .map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.name}
+                </option>
+              ))}
+          </select>
+        </div>
+
+        {/* interference check (BRIEF section 5) */}
+        {r.sprints.length > 1 && (
+          <div className={`mt-3 rounded-md p-3 text-sm ${r.interferenceChecked ? "bg-green-50" : "bg-yellow-100"}`}>
+            <div className="font-medium">Could these sprints affect each other&apos;s results?</div>
+            <p className="mt-0.5 text-xs text-muted">
+              For example, asking for payment at the same event where you measure enjoyment can lower the enjoyment scores.
+            </p>
+            <label className="mt-2 flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={r.interferenceChecked}
+                onChange={(e) => run(() => updateSession(r.id, "interferenceChecked", e.target.checked))}
+              />
+              We checked, and either they don&apos;t, or we accounted for it
+            </label>
+            <div className="mt-2">
+              <TextInput label="How (optional)" value={r.interferenceNote} onSave={save("interferenceNote")} />
+            </div>
+          </div>
+        )}
+
+        {/* evidence */}
+        <h3 className="mb-1 mt-4 text-xs font-semibold uppercase tracking-wide text-muted">Evidence ({r.evidence.length})</h3>
+        <div className="space-y-2">
+          {r.evidence.map((e) => (
+            <EvidenceItem key={e.id} evidence={e} metrics={metrics} />
+          ))}
+        </div>
+        <div className="mt-2 flex flex-wrap gap-4">
+          <Reveal label="Add evidence">
+            {(close) => (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  run(
+                    () => addEvidence(r.id, ev),
+                    (res) => {
+                      if (res.ok) {
+                        setEv({ ...ev, summary: "" });
+                        close();
+                      }
+                    },
+                  );
+                }}
+              >
+                <select className={inputCls} value={ev.type} onChange={(e) => setEv({ ...ev, type: e.target.value })}>
+                  {EVIDENCE_TYPES.filter((t) => t !== "interview").map((t) => (
+                    <option key={t} value={t}>
+                      {label(t)}
+                    </option>
+                  ))}
+                </select>
+                <textarea
+                  className={`${inputCls} mt-2`}
+                  rows={3}
+                  placeholder="What you saw or heard"
+                  value={ev.summary}
+                  onChange={(e) => setEv({ ...ev, summary: e.target.value })}
+                />
+                <Button type="submit" disabled={pending || !ev.summary.trim()}>
+                  Add evidence
+                </Button>
+              </form>
+            )}
+          </Reveal>
+          <AddInterviewLink sessionId={r.id} />
+        </div>
+      </EditArea>
     </Card>
+  );
+}
+
+function AddInterviewLink({ sessionId }: { sessionId: string }) {
+  if (useReadOnly()) return null;
+  return (
+    <Link href={`/interviews/new?session=${sessionId}`} className="mt-1 text-sm text-accent hover:brightness-110">
+      + Add an interview
+    </Link>
   );
 }
 
@@ -193,7 +213,15 @@ function EvidenceItem({ evidence: e, metrics }: { evidence: SessionData["evidenc
           </select>
           <textarea className={`${inputCls} mt-2`} rows={3} value={v.summary} onChange={(x) => setV({ ...v, summary: x.target.value })} />
           <div className="mt-1 flex gap-2">
-            <Button disabled={pending} onClick={() => run(() => updateEvidence(e.id, v), (r) => r.ok && setEditing(false))}>
+            <Button
+              disabled={pending}
+              onClick={() =>
+                run(
+                  () => updateEvidence(e.id, v),
+                  (r) => r.ok && setEditing(false),
+                )
+              }
+            >
               Save
             </Button>
             <Button kind="quiet" onClick={() => setEditing(false)}>

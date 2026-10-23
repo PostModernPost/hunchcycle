@@ -90,3 +90,13 @@ Choices made during the build that the brief didn't spell out.
 - **Seeded history entries** are dated when their sprint closed instead of when the import ran (fixed in the seed and in the database).
 - **Done-means check** ("closing the Game Day Pilot updates assumptions 1, 4, 5 and offers a prefilled next sprint") was run on a throwaway copy linked to the same three assumptions, because the real Game Day Pilot never launched. All values were restored afterward.
 
+## Milestone 5
+
+- **Login:** one password field; `OWNER_PASSWORD` or `COACH_PASSWORD` decides the role. The cookie `hc_session` holds `role.expiry.signature` (HMAC-SHA256 with `SESSION_SECRET`, 30 days, httpOnly, sameSite lax, secure in production). It is checked in `src/middleware.ts` for every page except `/login`, and again in server components and actions. Web Crypto is used so the same code runs in middleware.
+- **Coach can't edit, enforced on the server:** all 43 editing actions return an error for the coach (checked by forcing a disabled field back on in the browser and saving). The screens are read-only too: shared inputs, buttons, type pickers, and "+" reveals turn off for the coach, and `EditArea` (a disabled fieldset) covers the rest. Drag is off. Section toggles, reading details (now `<details>`), filters, and comments still work.
+- **Comments** record the role from the login plus a free name field (remembered in the browser for convenience). Both roles can comment on any sprint (panel and sprint page) and on saved briefs.
+- **Weekly brief** is built on demand for a date range (default: since the last saved brief ended, or the last 7 days), shown live, and saved as a JSON snapshot in `weekly_briefs` so it reads the same later. Sections: decisions made, assumption changes, sprints that moved columns, new sprints, readings added, sessions held, past report date, due next week, open questions. "Sessions held" and "new sprints" were added because they make the week readable for the coach.
+- **Column moves** are logged in `stage_changes` (migration 0003) from 2026-10-22 on; earlier moves were never recorded, and the brief says so.
+- **Open questions** live on the Weekly brief page; the owner adds them and ticks them off when answered.
+- **Imported records are dated by when they happened.** Sprints get their start date (or Oct 1, 2026 if the doc has none); the undated Sprint 1 reading and its assumption change also get Oct 1, 2026, so the brief doesn't show imports as this week's activity. Done in the seed and once in the database.
+

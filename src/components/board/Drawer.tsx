@@ -11,6 +11,8 @@ import * as A from "@/app/actions";
 import { createFromResults } from "@/app/assumptions/actions";
 import { Button, dateInput, inputCls, Label, Reveal, SelectInput, TextInput, useAction } from "./fields";
 import { TypePicker, type ExperimentType } from "./TypePicker";
+import { EditArea, useReadOnly } from "@/components/Role";
+import { Comments } from "@/components/Comments";
 
 export type Lists = {
   assumptions: { id: string; statement: string; status: string; category: string; importance: number; evidence: number }[];
@@ -45,6 +47,7 @@ export function Drawer({
   const { run } = useAction();
   const save = (field: string) => (v: string) => run(() => A.updateCard(card.id, field, v));
   const name = experimentName(card);
+  const readOnly = useReadOnly();
   const reached = FLOW.indexOf(card.stage);
   const sectionProps = { card, lists, save };
 
@@ -73,7 +76,7 @@ export function Drawer({
           <div className="flex items-center gap-2">
             <Pill>{STAGE_LABELS[card.stage]}</Pill>
             {card.decision && <Pill className="bg-orange-100 text-orange-800">{card.decision}</Pill>}
-            {card.tags.includes("seeded, review me") && (
+            {card.tags.includes("seeded, review me") && !readOnly && (
               <>
                 <SeedFlag tags={card.tags} />
                 <button className="text-xs text-accent hover:brightness-110" onClick={() => run(() => A.markReviewed(card.id))}>
@@ -123,19 +126,9 @@ export function Drawer({
               </Section>
             ))}
           {card.notes && <p className="mb-3 whitespace-pre-wrap text-xs text-muted">Notes: {card.notes}</p>}
-          {card.comments.length > 0 && (
-            <div className="mb-3">
-              <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">Comments</h3>
-              {card.comments.map((c) => (
-                <div key={c.id} className="mb-2 rounded-md border border-line bg-white p-3 text-sm">
-                  <div className="text-xs text-muted">
-                    {c.authorName ?? c.role}, {fmtDate(c.createdAt)}
-                  </div>
-                  <div className="mt-1 whitespace-pre-wrap">{c.body}</div>
-                </div>
-              ))}
-            </div>
-          )}
+          <div className="mb-3 mt-6">
+            <Comments comments={card.comments} experimentId={card.id} />
+          </div>
         </div>
       </aside>
     </div>
@@ -160,7 +153,11 @@ function Section({ stage, card, startOpen, children }: { stage: Stage; card: Boa
         </span>
         {n ? <span className="text-xs font-normal text-amber-700">{n} to fill</span> : <span className="text-xs font-normal text-green-700">Done</span>}
       </button>
-      {open && <div className="border-t border-line px-4 py-3">{children}</div>}
+      {open && (
+        <EditArea className="border-t border-line px-4 py-3">
+          {children}
+        </EditArea>
+      )}
     </section>
   );
 }
@@ -169,6 +166,7 @@ function Section({ stage, card, startOpen, children }: { stage: Stage; card: Boa
 function GateBox({ card, onOpen }: { card: BoardCard; onOpen: (id: string) => void }) {
   const { run, pending } = useAction();
   const [menu, setMenu] = useState(false);
+  const readOnly = useReadOnly();
   const idx = FLOW.indexOf(card.stage);
   if (card.stage === "closed") {
     return (
@@ -217,7 +215,7 @@ function GateBox({ card, onOpen }: { card: BoardCard; onOpen: (id: string) => vo
         <Button kind="primary" disabled={pending || !check.ok} onClick={() => run(() => A.moveCard(card.id, next))}>
           {next === "closed" ? "Close sprint" : `Expand into ${STAGE_LABELS[next]}`}
         </Button>
-        {prev && (
+        {prev && !readOnly && (
           <div className="relative ml-auto">
             <button className="rounded px-2 text-lg leading-none text-muted hover:text-ink" aria-label="More" onClick={() => setMenu(!menu)}>
               ⋯
@@ -404,12 +402,14 @@ function HypothesisSection({ card, save, onOpen }: SectionProps & { onOpen: (id:
 
 /** The subtitle and the MVP name are one field; it is editable in the header and in Test (MVP). */
 function SubtitleInput({ card, save, className = "", placeholder }: { card: BoardCard; save: (v: string) => void; className?: string; placeholder: string }) {
+  const readOnly = useReadOnly();
   return (
     <input
+      readOnly={readOnly}
       key={card.title ?? ""} // re-sync when the other copy of this field saves
       className={`w-full focus:outline-none ${className}`}
       defaultValue={card.title ?? ""}
-      placeholder={placeholder}
+      placeholder={readOnly ? "" : placeholder}
       onBlur={(e) => e.target.value !== (card.title ?? "") && save(e.target.value)}
     />
   );
@@ -646,17 +646,16 @@ function Readings({ metric: m }: { metric: Metric }) {
 
 /** A reading, which opens to show the evidence and people behind it (BRIEF section 5). */
 function ReadingRow({ reading: r }: { reading: Metric["readings"][number] }) {
-  const [open, setOpen] = useState(false);
   const linked = r.evidence.map((x) => x.evidence);
   return (
     <li>
-      <button className="text-left hover:underline" onClick={() => setOpen(!open)} aria-expanded={open}>
-        {r.numerator != null && r.denominator != null ? `${r.numerator} of ${r.denominator} (${pct(r.numerator, r.denominator)})` : r.value}
-        <span className="text-xs text-muted"> on {fmtDate(r.date)}</span>
-      </button>
-      {!r.verified && <Pill className="ml-2 bg-yellow-100 text-yellow-800">unverified</Pill>}
-      {r.note && <span className="ml-2 text-xs text-muted">{r.note}</span>}
-      {open && (
+      <details>
+        <summary className="cursor-pointer list-none hover:underline">
+          {r.numerator != null && r.denominator != null ? `${r.numerator} of ${r.denominator} (${pct(r.numerator, r.denominator)})` : r.value}
+          <span className="text-xs text-muted"> on {fmtDate(r.date)}</span>
+          {!r.verified && <Pill className="ml-2 bg-yellow-100 text-yellow-800">unverified</Pill>}
+          {r.note && <span className="ml-2 text-xs text-muted">{r.note}</span>}
+        </summary>
         <div className="ml-3 mt-1 border-l border-line pl-3 text-xs">
           {linked.length === 0 && (
             <p className="text-muted">{r.verified ? "Marked verified, but no evidence is linked yet." : "No evidence linked, so this reading is unverified."}</p>
@@ -674,7 +673,7 @@ function ReadingRow({ reading: r }: { reading: Metric["readings"][number] }) {
             </p>
           ))}
         </div>
-      )}
+      </details>
     </li>
   );
 }

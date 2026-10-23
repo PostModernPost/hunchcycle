@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { and, eq, max } from "drizzle-orm";
 import { db, schema as s } from "@/db";
+import { ownerOnly } from "@/lib/auth";
 import { loadCard } from "@/lib/board-data";
 import { blockedMessage, checkMove, toGateCard, type Stage } from "@/lib/gates";
 
@@ -22,6 +23,8 @@ async function nextCycle(typeId: string) {
 }
 
 export async function createCard(typeId: string, subtitle?: string, assumptionId?: string): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   if (!typeId) return { ok: false, error: "Choose a type first." };
   const [row] = await db
     .insert(s.experiments)
@@ -32,6 +35,8 @@ export async function createCard(typeId: string, subtitle?: string, assumptionId
 }
 
 export async function createType(name: string, needsScript: boolean): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   const clean = name.trim();
   if (!clean) return { ok: false, error: "Give the type a name." };
   const existing = (await db.select().from(s.experimentTypes)).find((t) => t.name.toLowerCase() === clean.toLowerCase());
@@ -42,6 +47,8 @@ export async function createType(name: string, needsScript: boolean): Promise<Re
 
 /** Changing the type gives the experiment the next number in its new type. */
 export async function changeType(id: string, typeId: string): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   const [e] = await db.select().from(s.experiments).where(eq(s.experiments.id, id));
   if (!e) return { ok: false, error: "Sprint not found." };
   if (!typeId || e.typeId === typeId) return { ok: true };
@@ -53,22 +60,29 @@ export async function changeType(id: string, typeId: string): Promise<Result> {
 }
 
 export async function moveCard(id: string, to: Stage): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   if (to === "closed") return closeCard(id);
   if (to === "metrics") to = "experiment";
   const card = await loadCard(id);
   if (!card) return { ok: false, error: "Sprint not found." };
+  if (card.stage === to) return { ok: true };
   const check = checkMove(toGateCard(card), to);
   if (!check.ok) return { ok: false, error: blockedMessage(check) };
   await db.update(s.experiments).set({ stage: to, closedAt: null, updatedAt: new Date() }).where(eq(s.experiments.id, id));
+  await db.insert(s.stageChanges).values({ experimentId: id, fromStage: card.stage, toStage: to });
   return done();
 }
 
 export async function closeCard(id: string): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   const card = await loadCard(id);
   if (!card) return { ok: false, error: "Sprint not found." };
   const check = checkMove(toGateCard(card), "closed");
   if (!check.ok) return { ok: false, error: blockedMessage(check) };
   await db.update(s.experiments).set({ stage: "closed", closedAt: new Date(), updatedAt: new Date() }).where(eq(s.experiments.id, id));
+  await db.insert(s.stageChanges).values({ experimentId: id, fromStage: card.stage, toStage: "closed" });
   return done();
 }
 
@@ -77,6 +91,8 @@ const METHODS = s.method.enumValues;
 const DECISIONS = s.decision.enumValues;
 
 export async function updateCard(id: string, field: string, value: unknown): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   let patch: Partial<typeof s.experiments.$inferInsert>;
   if ((TEXT_FIELDS as readonly string[]).includes(field)) {
     patch = { [field]: toText(value) };
@@ -99,6 +115,8 @@ export async function updateCard(id: string, field: string, value: unknown): Pro
 
 /** Split from Hypothesis: a sibling card with the same assumptions and hypothesis. */
 export async function splitCard(id: string): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   const card = await loadCard(id);
   if (!card) return { ok: false, error: "Sprint not found." };
   if (card.stage !== "hypothesis") return { ok: false, error: "Sprints can only be split from the Hypothesis column." };
@@ -129,6 +147,8 @@ export async function splitCard(id: string): Promise<Result> {
  * prefilled with the same assumptions plus any new ones that came out of its results.
  */
 export async function createNextExperiment(id: string): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   const card = await loadCard(id);
   if (!card) return { ok: false, error: "Sprint not found." };
   if (card.stage !== "closed") return { ok: false, error: "Close this sprint before starting the next one." };
@@ -148,6 +168,8 @@ export async function createNextExperiment(id: string): Promise<Result> {
 
 /** Clears the "seeded, review me" tag once Adam has checked an imported experiment. */
 export async function markReviewed(id: string): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   const [e] = await db.select().from(s.experiments).where(eq(s.experiments.id, id));
   if (!e) return { ok: false, error: "Sprint not found." };
   await db
@@ -160,11 +182,15 @@ export async function markReviewed(id: string): Promise<Result> {
 // ---------- Assumptions ----------
 
 export async function linkAssumption(experimentId: string, assumptionId: string): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   await db.insert(s.experimentAssumptions).values({ experimentId, assumptionId }).onConflictDoNothing();
   return done();
 }
 
 export async function unlinkAssumption(experimentId: string, assumptionId: string): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   await db
     .delete(s.experimentAssumptions)
     .where(and(eq(s.experimentAssumptions.experimentId, experimentId), eq(s.experimentAssumptions.assumptionId, assumptionId)));
@@ -175,6 +201,8 @@ export async function createAssumption(
   experimentId: string,
   v: { statement: string; category: string; importance: number; evidence: number },
 ): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   if (!v.statement.trim()) return { ok: false, error: "Write the assumption first." };
   const category = s.assumptionCategory.enumValues.includes(v.category as never)
     ? (v.category as (typeof s.assumptionCategory.enumValues)[number])
@@ -193,6 +221,8 @@ export async function updateAssumptionFromDecision(
   assumptionId: string,
   v: { evidence: number; status: string; note: string },
 ): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   const [a] = await db.select().from(s.assumptions).where(eq(s.assumptions.id, assumptionId));
   if (!a) return { ok: false, error: "Assumption not found." };
   const status = s.assumptionStatus.enumValues.includes(v.status as never)
@@ -215,6 +245,8 @@ export async function updateAssumptionFromDecision(
 // ---------- Metrics ----------
 
 export async function addMetric(experimentId: string): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   const [{ n }] = await db.select({ n: max(s.metrics.order) }).from(s.metrics).where(eq(s.metrics.experimentId, experimentId));
   const [m] = await db
     .insert(s.metrics)
@@ -226,6 +258,8 @@ export async function addMetric(experimentId: string): Promise<Result> {
 const METRIC_TEXT = ["name", "source", "passLine", "passDecision", "killLine", "killDecision"] as const;
 
 export async function updateMetric(id: string, field: string, value: unknown): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   let patch: Partial<typeof s.metrics.$inferInsert>;
   if ((METRIC_TEXT as readonly string[]).includes(field)) {
     if (field === "name" && !toText(value)) return { ok: false, error: "The metric needs a name." };
@@ -242,6 +276,8 @@ export async function updateMetric(id: string, field: string, value: unknown): P
 }
 
 export async function deleteMetric(id: string): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   await db.delete(s.metrics).where(eq(s.metrics.id, id));
   return done();
 }
@@ -251,6 +287,8 @@ export async function addReading(
   metricId: string,
   v: { numerator: string; denominator: string; value: string; date: string; note: string; evidenceId: string },
 ): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   const numerator = toInt(v.numerator);
   const denominator = toInt(v.denominator);
   const value = numerator != null && denominator ? numerator / denominator : v.value.trim() ? Number(v.value) : null;
@@ -274,16 +312,22 @@ export async function addReading(
 // ---------- Runs and evidence ----------
 
 export async function linkRun(experimentId: string, runId: string): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   await db.insert(s.experimentRuns).values({ experimentId, runId }).onConflictDoNothing();
   return done();
 }
 
 export async function unlinkRun(experimentId: string, runId: string): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   await db.delete(s.experimentRuns).where(and(eq(s.experimentRuns.experimentId, experimentId), eq(s.experimentRuns.runId, runId)));
   return done();
 }
 
 export async function createRun(experimentId: string, v: { name: string; date: string }): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   if (!v.name.trim()) return { ok: false, error: "Give the session a name." };
   const [run] = await db.insert(s.runs).values({ name: v.name.trim(), startDate: toDate(v.date) }).returning();
   await db.insert(s.experimentRuns).values({ experimentId, runId: run.id });
@@ -291,6 +335,8 @@ export async function createRun(experimentId: string, v: { name: string; date: s
 }
 
 export async function addEvidence(runId: string, v: { type: string; summary: string }): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   if (!v.summary.trim()) return { ok: false, error: "Write what you saw or heard." };
   const type = s.evidenceType.enumValues.includes(v.type as never) ? (v.type as "observation") : "observation";
   await db.insert(s.evidence).values({ runId, type, summary: v.summary.trim() });

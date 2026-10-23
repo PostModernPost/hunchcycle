@@ -3,12 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db, schema as s } from "@/db";
+import { ownerOnly } from "@/lib/auth";
 import { clamp, toDate, toText, type Result } from "@/lib/parse";
 import { INTERVIEW_TEXT_FIELDS, type InterviewInput, type InterviewTextField } from "@/lib/interview-fields";
 
 const TEXT_FIELDS = INTERVIEW_TEXT_FIELDS;
 
 export async function saveInterview(v: InterviewInput): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   if (!v.runId) return { ok: false, error: "Pick the session this interview happened in." };
   let personId = v.personId;
   if (!personId) {
@@ -60,6 +63,8 @@ export async function saveInterview(v: InterviewInput): Promise<Result> {
 
 /** Deleting an interview removes its evidence row and answers too. The person stays. */
 export async function deleteInterview(id: string): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   const [iv] = await db.select().from(s.interviews).where(eq(s.interviews.id, id));
   if (!iv) return { ok: false, error: "Interview not found." };
   await db.delete(s.evidence).where(eq(s.evidence.id, iv.evidenceId));

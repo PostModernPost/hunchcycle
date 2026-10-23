@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { db, schema as s } from "@/db";
+import { ownerOnly } from "@/lib/auth";
 import { toDate, toList, toText, type Result } from "@/lib/parse";
 
 const done = (id?: string): Result => {
@@ -11,6 +12,8 @@ const done = (id?: string): Result => {
 };
 
 export async function createSession(v: { name: string; startDate: string; endDate: string; location: string; runBy: string }): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   if (!v.name.trim()) return { ok: false, error: "Give the session a name." };
   const [row] = await db
     .insert(s.runs)
@@ -22,6 +25,8 @@ export async function createSession(v: { name: string; startDate: string; endDat
 const TEXT = ["name", "location", "runBy", "notes", "interferenceNote"] as const;
 
 export async function updateSession(id: string, field: string, value: unknown): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   let patch: Partial<typeof s.runs.$inferInsert>;
   if ((TEXT as readonly string[]).includes(field)) {
     if (field === "name" && !toText(value)) return { ok: false, error: "The session needs a name." };
@@ -40,6 +45,8 @@ export async function updateSession(id: string, field: string, value: unknown): 
 }
 
 export async function updateEvidence(id: string, v: { summary: string; type: string }): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   if (!v.summary.trim()) return { ok: false, error: "Evidence needs a summary." };
   const type = s.evidenceType.enumValues.includes(v.type as never) ? (v.type as "observation") : "observation";
   await db.update(s.evidence).set({ summary: v.summary.trim(), type }).where(eq(s.evidence.id, id));
@@ -48,6 +55,8 @@ export async function updateEvidence(id: string, v: { summary: string; type: str
 
 /** Interviews are deleted from their own page, not here, so this only removes plain evidence. */
 export async function deleteEvidence(id: string): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   const [iv] = await db.select({ id: s.interviews.id }).from(s.interviews).where(eq(s.interviews.evidenceId, id));
   if (iv) return { ok: false, error: "This evidence is an interview. Open the interview to change it." };
   await db.delete(s.evidence).where(eq(s.evidence.id, id));
@@ -56,6 +65,8 @@ export async function deleteEvidence(id: string): Promise<Result> {
 
 /** Tag evidence to a metric (or untag it). */
 export async function toggleEvidenceMetric(evidenceId: string, metricId: string, on: boolean): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   if (on) await db.insert(s.evidenceMetrics).values({ evidenceId, metricId }).onConflictDoNothing();
   else await db.delete(s.evidenceMetrics).where(and(eq(s.evidenceMetrics.evidenceId, evidenceId), eq(s.evidenceMetrics.metricId, metricId)));
   return done();

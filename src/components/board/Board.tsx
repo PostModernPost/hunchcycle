@@ -13,6 +13,7 @@ import { createCard, createNextExperiment, moveCard } from "@/app/actions";
 import { Drawer, type Lists } from "./Drawer";
 import { Button, inputCls, ToastContext, useAction } from "./fields";
 import { TypePicker, type ExperimentType } from "./TypePicker";
+import { useReadOnly } from "@/components/Role";
 
 const WIP_LIMIT = 3;
 const SEED_TAG = "seeded, review me";
@@ -60,7 +61,8 @@ function BoardInner({ cards, lists, initialOpen }: Props) {
     .filter((c) => c.stage === "closed")
     .sort((a, b) => +new Date(b.closedAt ?? b.updatedAt) - +new Date(a.closedAt ?? a.updatedAt));
   const running = active.filter((c) => c.stage === "running").length;
-  const toReview = cards.filter((c) => c.tags.includes(SEED_TAG)).length;
+  const readOnly = useReadOnly();
+  const toReview = readOnly ? 0 : cards.filter((c) => c.tags.includes(SEED_TAG)).length;
   const openCard = cards.find((c) => c.id === openState?.id) ?? null;
   const dragCard = visible.find((c) => c.id === dragId) ?? null;
 
@@ -86,6 +88,7 @@ function BoardInner({ cards, lists, initialOpen }: Props) {
   return (
     <>
       <Toolbar query={query} setQuery={setQuery} onCreated={(id) => open(id)} types={lists.types} />
+      {readOnly && <p className="mb-3 text-sm text-muted">You&apos;re logged in as the coach: you can open anything and comment on any sprint, but not change or move sprints.</p>}
       {toReview > 0 && (
         <p className="mb-3 text-sm text-muted">
           <span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-violet-800" />
@@ -162,9 +165,11 @@ function Toolbar({
   const [title, setTitle] = useState("");
   const [typeId, setTypeId] = useState("");
   const { run, pending } = useAction();
+  const readOnly = useReadOnly();
   return (
     <div className="mb-3 flex flex-wrap items-center gap-2">
       <form
+        hidden={readOnly}
         className="flex gap-2"
         onSubmit={(e) => {
           e.preventDefault();
@@ -321,17 +326,20 @@ function DoneCell({ card, stage, first, onOpen }: { card: BoardCard; stage: Stag
 
 /** The step the experiment is on now: the only one with detail, and the one you drag. */
 function CurrentCell({ card, first, onOpen }: { card: BoardCard; first: boolean; onOpen: Opener }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: card.id });
+  const readOnly = useReadOnly();
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: card.id, disabled: readOnly });
   const missing = missingFor(card.stage, toGateCard(card));
   return (
-    <div ref={setNodeRef} {...listeners} {...attributes} className={`h-full ${isDragging ? "opacity-50" : ""}`} title="Click to open. Drag right to expand.">
+    <div ref={setNodeRef} {...listeners} {...attributes} className={`h-full ${isDragging ? "opacity-50" : ""}`} title={readOnly ? "Click to open" : "Click to open. Drag right to expand."}>
       <StepBody card={card} stage={card.stage} first={first} last onOpen={onOpen} strong>
         <Detail card={card} stage={card.stage} />
         <div className={`mt-2 flex items-center justify-between font-medium ${missing.length ? "text-amber-700" : "text-green-700"}`}>
           <span>{missing.length ? `${missing.length} to fill` : "Ready"}</span>
-          <span className="text-base leading-none text-muted" aria-hidden>
-            ⋮⋮
-          </span>
+          {!readOnly && (
+            <span className="text-base leading-none text-muted" aria-hidden>
+              ⋮⋮
+            </span>
+          )}
         </div>
       </StepBody>
     </div>
@@ -342,9 +350,10 @@ function FutureCell({ card, stage, dragging, next }: { card: BoardCard; stage: S
   const { setNodeRef, isOver } = useDroppable({ id: `${card.id}|${stage}` });
   const check = dragging ? checkMove(toGateCard(card), stage) : null;
   const color = stageColor(stage);
+  const readOnly = useReadOnly();
   return (
     <div ref={setNodeRef} className="h-full px-1">
-      {!dragging && next && (
+      {!dragging && next && !readOnly && (
         <div className="flex h-full items-center justify-center rounded-md border border-dashed border-line p-2 text-center text-xs text-muted">
           Drag here when ready
         </div>

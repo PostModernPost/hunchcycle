@@ -4,6 +4,7 @@
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db, schema as s } from "@/db";
+import { ownerOnly } from "@/lib/auth";
 import { clamp, toInt, toText, type Result } from "@/lib/parse";
 
 const done = (id?: string): Result => {
@@ -16,6 +17,8 @@ const category = (c: string) =>
   s.assumptionCategory.enumValues.includes(c as never) ? (c as (typeof s.assumptionCategory.enumValues)[number]) : "other";
 
 export async function createAssumption(v: Draft): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   if (!v.statement.trim()) return { ok: false, error: "Write the assumption first." };
   const [a] = await db
     .insert(s.assumptions)
@@ -26,6 +29,8 @@ export async function createAssumption(v: Draft): Promise<Result> {
 
 /** A new assumption that came out of a sprint's results. The next sprint starts with it. */
 export async function createFromResults(experimentId: string, v: Draft & { parentId: string }): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   if (!v.statement.trim()) return { ok: false, error: "Write the assumption first." };
   const [a] = await db
     .insert(s.assumptions)
@@ -43,6 +48,8 @@ export async function createFromResults(experimentId: string, v: Draft & { paren
 }
 
 export async function updateAssumption(id: string, field: string, value: unknown): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
   const [a] = await db.select().from(s.assumptions).where(eq(s.assumptions.id, id));
   if (!a) return { ok: false, error: "Assumption not found." };
   let patch: Partial<typeof s.assumptions.$inferInsert>;

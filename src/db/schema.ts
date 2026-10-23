@@ -381,6 +381,17 @@ export const comments = pgTable("comments", {
   createdAt: created(),
 });
 
+/** Every column change on the board, for the weekly brief's "moved columns" section. */
+export const stageChanges = pgTable("stage_changes", {
+  id: id(),
+  experimentId: text("experiment_id")
+    .notNull()
+    .references(() => experiments.id, { onDelete: "cascade" }),
+  fromStage: stage("from_stage").notNull(),
+  toStage: stage("to_stage").notNull(),
+  createdAt: created(),
+});
+
 export const openQuestions = pgTable("open_questions", {
   id: id(),
   text: text("text").notNull(),
@@ -472,6 +483,9 @@ export const questionsRelations = relations(questions, ({ many }) => ({
 export const answersRelations = relations(answers, ({ one }) => ({
   interview: one(interviews, { fields: [answers.interviewId], references: [interviews.id] }),
   question: one(questions, { fields: [answers.questionId], references: [questions.id] }),
+}));
+export const stageChangesRelations = relations(stageChanges, ({ one }) => ({
+  experiment: one(experiments, { fields: [stageChanges.experimentId], references: [experiments.id] }),
 }));
 export const commentsRelations = relations(comments, ({ one }) => ({
   experiment: one(experiments, { fields: [comments.experimentId], references: [experiments.id] }),

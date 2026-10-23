@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { EditArea } from "@/components/Role";
 import { Button, inputCls, Label, Reveal, TextInput, useAction } from "@/components/board/fields";
 import {
   addNewQuestionToScript,
@@ -32,13 +33,22 @@ export function ScriptEditor({ script: x, questions, bank, interviewCount }: Pro
   const [newText, setNewText] = useState("");
 
   const copy = (
-    <Button kind={locked ? "primary" : "secondary"} disabled={pending} onClick={() => run(() => copyToNewVersion(x.id), (r) => r.ok && r.id && router.push(`/scripts/${r.id}`))}>
+    <Button
+      kind={locked ? "primary" : "secondary"}
+      disabled={pending}
+      onClick={() =>
+        run(
+          () => copyToNewVersion(x.id),
+          (r) => r.ok && r.id && router.push(`/scripts/${r.id}`),
+        )
+      }
+    >
       Copy to a new version
     </Button>
   );
 
   return (
-    <div>
+    <EditArea>
       <div className="mb-4 flex flex-wrap items-center gap-3">
         {copy}
         {x.parent && (
@@ -53,8 +63,8 @@ export function ScriptEditor({ script: x, questions, bank, interviewCount }: Pro
 
       {locked && (
         <p className="mb-4 rounded-md bg-amber-100 px-3 py-2 text-sm text-amber-900">
-          {interviewCount} interview{interviewCount === 1 ? " uses" : "s use"} this version, so its questions are locked to keep those interviews intact. To change the
-          questions, copy it to a new version.
+          {interviewCount} interview{interviewCount === 1 ? " uses" : "s use"} this version, so its questions are locked to keep those interviews intact. To
+          change the questions, copy it to a new version.
         </p>
       )}
 
@@ -92,7 +102,12 @@ export function ScriptEditor({ script: x, questions, bank, interviewCount }: Pro
             </div>
             {!locked && (
               <div className="flex shrink-0 items-center gap-1 pt-1">
-                <button className="px-1 text-muted hover:text-ink disabled:opacity-30" aria-label="Move up" disabled={i === 0 || pending} onClick={() => run(() => moveInScript(q.id, "up"))}>
+                <button
+                  className="px-1 text-muted hover:text-ink disabled:opacity-30"
+                  aria-label="Move up"
+                  disabled={i === 0 || pending}
+                  onClick={() => run(() => moveInScript(q.id, "up"))}
+                >
                   ↑
                 </button>
                 <button
@@ -145,7 +160,13 @@ export function ScriptEditor({ script: x, questions, bank, interviewCount }: Pro
                   );
                 }}
               >
-                <input className={inputCls} autoFocus value={newText} onChange={(e) => setNewText(e.target.value)} placeholder="It also goes into the question bank" />
+                <input
+                  className={inputCls}
+                  autoFocus
+                  value={newText}
+                  onChange={(e) => setNewText(e.target.value)}
+                  placeholder="It also goes into the question bank"
+                />
                 <div className="mt-2">
                   <Button type="submit" disabled={pending || !newText.trim()}>
                     Add question
@@ -156,7 +177,7 @@ export function ScriptEditor({ script: x, questions, bank, interviewCount }: Pro
           </Reveal>
         </div>
       )}
-    </div>
+    </EditArea>
   );
 }
 

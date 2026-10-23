@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { createType } from "@/app/actions";
 import { Button, inputCls, useAction } from "./fields";
+import { useReadOnly } from "@/components/Role";
 
 export type ExperimentType = { id: string; name: string; needsScript: boolean };
 
@@ -22,6 +23,7 @@ export function TypePicker({
   className?: string;
 }) {
   const { run, pending } = useAction();
+  const readOnly = useReadOnly();
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
   const [needsScript, setNeedsScript] = useState(false);
@@ -69,6 +71,7 @@ export function TypePicker({
 
   return (
     <select
+      disabled={readOnly}
       className={`${inputCls.replace("w-full ", "")} ${className || "w-full"}`}
       value={value ?? ""}
       onChange={(e) => {

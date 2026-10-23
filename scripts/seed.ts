@@ -646,8 +646,12 @@ async function main() {
     [a6.id],
   );
 
-  // seeded history entries are dated when their sprint closed, not when the import ran
-  await db.execute(sql`UPDATE assumption_history h SET created_at = e.closed_at FROM experiments e WHERE h.experiment_id = e.id AND e.closed_at IS NOT NULL`);
+  // Date imported records by when they happened, not when the import ran, so the weekly brief doesn't
+  // show them as this week's activity. Records the coaching doc gives no date for get Oct 1, 2026.
+  const UNDATED = "2026-10-01T12:00:00-07:00";
+  await db.execute(sql`UPDATE assumption_history h SET created_at = COALESCE(e.closed_at, ${UNDATED}::timestamptz) FROM experiments e WHERE h.experiment_id = e.id`);
+  await db.execute(sql`UPDATE experiments SET created_at = LEAST(COALESCE(start_date, ${UNDATED}::timestamptz), ${UNDATED}::timestamptz)`);
+  await db.execute(sql`UPDATE metric_readings SET date = ${UNDATED}::timestamptz WHERE date > now() - interval '1 hour'`);
 
   // ---- open questions + coach comment ----
   if (newQuestions.length) await db.insert(s.openQuestions).values(newQuestions.map((text) => ({ text })));
