@@ -2,14 +2,27 @@
 // The board: one row per active experiment. A row fills in left to right as the experiment moves
 // through the chain (BRIEF section 4). Drag the current step into a later column to expand the row
 // (gated), or into an earlier one to move it back. Click any step to open the drawer there.
-// Finished experiments are listed separately underneath as slim lines.
+// Finished experiments are listed separately underneath as slim lines. The owner sets the row order
+// by dragging the grip next to a sprint's name; new sprints show at the top.
 import { useContext, useMemo, useState } from "react";
-import { DndContext, DragOverlay, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  pointerWithin,
+  rectIntersection,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type CollisionDetection,
+  type DragEndEvent,
+} from "@dnd-kit/core";
 import type { BoardCard } from "@/lib/board-data";
 import { BOARD_STAGES, blockedMessage, checkMove, filled, isStale, missingFor, toGateCard, type Stage } from "@/lib/gates";
 import { experimentName, experimentSubtitle, fmtDate, STAGE_LABELS } from "@/lib/format";
 import { Pill } from "@/components/ui";
-import { createCard, createNextExperiment, moveCard } from "@/app/actions";
+import { createCard, createNextExperiment, moveCard, reorderSprints } from "@/app/actions";
 import { Drawer, type Lists } from "./Drawer";
 import { Button, inputCls, ToastContext, useAction } from "./fields";
 import { TypePicker, type ExperimentType } from "./TypePicker";
@@ -22,6 +35,12 @@ const GRID = { gridTemplateColumns: `250px repeat(${BOARD_STAGES.length}, 170px)
 export const stageColor = (s: Stage) => `var(--color-stage-${s === "closed" ? "decision" : s})`;
 
 type Props = { cards: BoardCard[]; lists: Lists; initialOpen?: string };
+
+// Drop onto whatever is under the pointer; fall back to overlap when the pointer is between cells.
+const underPointer: CollisionDetection = (args) => {
+  const hits = pointerWithin(args);
+  return hits.length ? hits : rectIntersection(args);
+};
 type Opener = (id: string | null, focus?: Stage) => void;
 
 export function Board(props: Props) {
@@ -36,6 +55,7 @@ function BoardInner({ cards, lists, initialOpen }: Props) {
   const [dragId, setDragId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [showFinished, setShowFinished] = useState(false);
+  const [order, setOrder] = useState<string[] | null>(null); // optimistic row order while a reorder saves
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const now = useMemo(() => new Date(), []);
 
@@ -52,10 +72,13 @@ function BoardInner({ cards, lists, initialOpen }: Props) {
   const visible = cards
     .map((c) => ({ ...c, stage: moved[c.id] ?? c.stage }))
     .filter((c) => !q || `${experimentName(c)} ${c.title ?? ""}`.toLowerCase().includes(q));
-  // past report date first, then furthest along
-  const active = visible
-    .filter((c) => c.stage !== "closed")
-    .sort((a, b) => Number(isStale(b, now)) - Number(isStale(a, now)) || STAGE_INDEX[b.stage] - STAGE_INDEX[a.stage]);
+  // the saved row order; sprints without one (new) come first, newest on top
+  const saved = cards
+    .filter((c) => (moved[c.id] ?? c.stage) !== "closed")
+    .sort((a, b) => (a.sortOrder ?? -Infinity) - (b.sortOrder ?? -Infinity) || +new Date(b.createdAt) - +new Date(a.createdAt))
+    .map((c) => c.id);
+  const rowOrder = order ?? saved;
+  const active = visible.filter((c) => c.stage !== "closed").sort((a, b) => rowOrder.indexOf(a.id) - rowOrder.indexOf(b.id));
   // most recently finished first
   const finished = visible
     .filter((c) => c.stage === "closed")
@@ -64,10 +87,30 @@ function BoardInner({ cards, lists, initialOpen }: Props) {
   const readOnly = useReadOnly();
   const toReview = readOnly ? 0 : cards.filter((c) => c.tags.includes(SEED_TAG)).length;
   const openCard = cards.find((c) => c.id === openState?.id) ?? null;
-  const dragCard = visible.find((c) => c.id === dragId) ?? null;
+  const rowDragId = dragId?.startsWith("row:") ? dragId.slice(4) : null;
+  const dragCard = visible.find((c) => c.id === (rowDragId ?? dragId)) ?? null;
+
+  /** Drop a row's grip on another row: it takes that row's place. */
+  const onRowDrop = (fromId: string, toId: string) => {
+    const from = rowOrder.indexOf(fromId);
+    const to = rowOrder.indexOf(toId);
+    if (from < 0 || to < 0 || from === to) return;
+    const next = [...rowOrder];
+    next.splice(to, 0, ...next.splice(from, 1));
+    setOrder(next);
+    run(
+      () => reorderSprints(next),
+      () => setOrder(null),
+    );
+  };
 
   const onDragEnd = (e: DragEndEvent) => {
     setDragId(null);
+    if (String(e.active.id).startsWith("row:")) {
+      const over = String(e.over?.id ?? "");
+      if (over.startsWith("rowdrop:")) onRowDrop(String(e.active.id).slice(4), over.slice(8));
+      return;
+    }
     const card = visible.find((c) => c.id === e.active.id);
     const [rowId, to] = String(e.over?.id ?? "").split("|") as [string, Stage];
     if (!card || rowId !== card.id || !to || to === card.stage) return;
@@ -102,20 +145,27 @@ function BoardInner({ cards, lists, initialOpen }: Props) {
       )}
 
       {/* A fixed id keeps dnd-kit's generated ids the same on the server and in the browser. */}
-      <DndContext id="board" sensors={sensors} onDragStart={(e) => setDragId(String(e.active.id))} onDragCancel={() => setDragId(null)} onDragEnd={onDragEnd}>
+      <DndContext id="board" sensors={sensors} collisionDetection={underPointer} onDragStart={(e) => setDragId(String(e.active.id))} onDragCancel={() => setDragId(null)} onDragEnd={onDragEnd}>
         <div className="-mx-4 overflow-x-auto px-4 pb-4">
           <div className="grid min-w-max gap-y-2" style={GRID}>
             <HeaderRow />
             {active.length === 0 && <div className="col-span-full py-6 text-sm text-muted">No sprints match.</div>}
             {active.map((c) => (
-              <Row key={c.id} card={c} now={now} dragging={dragId === c.id} onOpen={open} />
+              <Row
+                key={c.id}
+                card={c}
+                now={now}
+                dragging={dragId === c.id}
+                onOpen={open}
+                dropSide={rowDragId && rowDragId !== c.id ? (rowOrder.indexOf(rowDragId) > rowOrder.indexOf(c.id) ? "above" : "below") : null}
+              />
             ))}
           </div>
         </div>
         <DragOverlay dropAnimation={null}>
           {dragCard && (
             <div className="rounded-md border px-3 py-2 text-xs font-medium shadow-lg" style={{ borderColor: stageColor(dragCard.stage), background: "var(--color-raised)" }}>
-              Drag into a column to expand <span className="text-muted">{experimentName(dragCard)}</span>
+              {rowDragId ? "Moving" : "Drag into a column to expand"} <span className="text-muted">{experimentName(dragCard)}</span>
             </div>
           )}
         </DragOverlay>
@@ -210,14 +260,48 @@ function HeaderRow() {
   );
 }
 
-function TitleCell({ card: c, now, onOpen, slim, children }: { card: BoardCard; now?: Date; onOpen: Opener; slim?: boolean; children?: React.ReactNode }) {
+function TitleCell({
+  card: c,
+  now,
+  onOpen,
+  slim,
+  reorder,
+  dropSide,
+  children,
+}: {
+  card: BoardCard;
+  now?: Date;
+  onOpen: Opener;
+  slim?: boolean;
+  reorder?: boolean; // active rows get a grip to drag them up or down
+  dropSide?: "above" | "below" | null;
+  children?: React.ReactNode;
+}) {
   const stale = now && isStale(c, now);
+  const readOnly = useReadOnly();
+  const grip = useDraggable({ id: `row:${c.id}`, disabled: !reorder || readOnly });
+  const drop = useDroppable({ id: `rowdrop:${c.id}`, disabled: !reorder });
+  const line = drop.isOver && dropSide ? (dropSide === "above" ? "shadow-[inset_0_3px_0_var(--color-accent)]" : "shadow-[inset_0_-3px_0_var(--color-accent)]") : "";
   return (
-    <div className="sticky left-0 z-10 bg-paper pr-3">
-      <div className={`h-full rounded-l-lg border-l-4 bg-surface ${slim ? "px-3 py-1.5" : "p-3"}`} style={{ borderLeftColor: stageColor(c.stage) }}>
-        <button className="text-left text-sm font-semibold leading-snug hover:underline" onClick={() => onOpen(c.id)}>
-          {experimentName(c)}
-        </button>
+    <div ref={drop.setNodeRef} className="sticky left-0 z-10 bg-paper pr-3">
+      <div className={`h-full rounded-l-lg border-l-4 bg-surface ${slim ? "px-3 py-1.5" : "p-3"} ${line}`} style={{ borderLeftColor: stageColor(c.stage) }}>
+        <div className="flex items-start gap-1.5">
+          {reorder && !readOnly && (
+            <button
+              ref={grip.setNodeRef}
+              {...grip.listeners}
+              {...grip.attributes}
+              className={`-ml-1 cursor-grab touch-none px-0.5 text-muted hover:text-ink ${grip.isDragging ? "opacity-40" : ""}`}
+              aria-label={`Move ${experimentName(c)} up or down`}
+              title="Drag up or down to reorder"
+            >
+              ⠿
+            </button>
+          )}
+          <button className="text-left text-sm font-semibold leading-snug hover:underline" onClick={() => onOpen(c.id)}>
+            {experimentName(c)}
+          </button>
+        </div>
         {experimentSubtitle(c) && <div className={`text-xs leading-snug text-muted ${slim ? "line-clamp-1" : ""}`}>{experimentSubtitle(c)}</div>}
         {(stale || c.siblingGroup) && (
           <div className="mt-1.5 flex flex-wrap gap-1">
@@ -231,11 +315,23 @@ function TitleCell({ card: c, now, onOpen, slim, children }: { card: BoardCard; 
   );
 }
 
-function Row({ card: c, now, dragging, onOpen }: { card: BoardCard; now: Date; dragging: boolean; onOpen: Opener }) {
+function Row({
+  card: c,
+  now,
+  dragging,
+  onOpen,
+  dropSide,
+}: {
+  card: BoardCard;
+  now: Date;
+  dragging: boolean;
+  onOpen: Opener;
+  dropSide: "above" | "below" | null;
+}) {
   const current = STAGE_INDEX[c.stage];
   return (
     <>
-      <TitleCell card={c} now={now} onOpen={onOpen} />
+      <TitleCell card={c} now={now} onOpen={onOpen} reorder dropSide={dropSide} />
       {BOARD_STAGES.map((s, i) =>
         i < current ? (
           <DoneCell key={s} card={c} stage={s} first={i === 0} onOpen={onOpen} />

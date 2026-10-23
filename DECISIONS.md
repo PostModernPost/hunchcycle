@@ -101,3 +101,9 @@ Choices made during the build that the brief didn't spell out.
 - **Imported records are dated by when they happened.** Sprints get their start date (or Oct 1, 2026 if the doc has none); the undated Sprint 1 reading and its assumption change also get Oct 1, 2026, so the brief doesn't show imports as this week's activity. Done in the seed and once in the database.
 - **Sign in as Owner or Coach (same day).** At Adam's request the login page asks for the role first, then checks the password set for that role, so both can share a password. Locally both are "12345" for now (in `.env`, not committed). Use real passwords before deploying.
 
+## Row order (2026-10-23, Adam's request)
+
+- **The owner sets the board's row order** by dragging the grip next to a sprint's name. It is saved in `experiments.sort_order` (migration 0004), so it holds after reload and for the coach. Sprints without an order (new ones) show at the top, newest first. The order existing on that day (overdue first, then furthest along) was saved as the starting order.
+- **This replaces the BRIEF's "stale cards sort to the top" rule** on the board. Overdue sprints still get the red "past report date" flag, and the weekly brief still lists them.
+- **Drops go to whatever is under the pointer** (dnd-kit `pointerWithin`, falling back to overlap), for both row moves and column moves.
+

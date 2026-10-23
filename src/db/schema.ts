@@ -144,6 +144,8 @@ export const experiments = pgTable("experiments", {
   decisionNote: text("decision_note"),
   closedAt: timestamp("closed_at", { withTimezone: true }),
   siblingGroup: text("sibling_group"),
+  // the owner's row order on the board (lowest first); empty for new sprints, which show at the top
+  sortOrder: integer("sort_order"),
   tags: textArray("tags"),
   notes: text("notes"),
   createdAt: created(),

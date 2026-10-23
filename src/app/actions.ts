@@ -166,6 +166,14 @@ export async function createNextExperiment(id: string): Promise<Result> {
   return done(next.id);
 }
 
+/** Saves the board's row order: the sprints in the order given, top first. */
+export async function reorderSprints(ids: string[]): Promise<Result> {
+  const denied = await ownerOnly();
+  if (denied) return denied;
+  for (const [i, id] of ids.entries()) await db.update(s.experiments).set({ sortOrder: i }).where(eq(s.experiments.id, id));
+  return done();
+}
+
 /** Clears the "seeded, review me" tag once Adam has checked an imported experiment. */
 export async function markReviewed(id: string): Promise<Result> {
   const denied = await ownerOnly();
