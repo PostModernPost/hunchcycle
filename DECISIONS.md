@@ -99,4 +99,5 @@ Choices made during the build that the brief didn't spell out.
 - **Column moves** are logged in `stage_changes` (migration 0003) from 2026-10-22 on; earlier moves were never recorded, and the brief says so.
 - **Open questions** live on the Weekly brief page; the owner adds them and ticks them off when answered.
 - **Imported records are dated by when they happened.** Sprints get their start date (or Oct 1, 2026 if the doc has none); the undated Sprint 1 reading and its assumption change also get Oct 1, 2026, so the brief doesn't show imports as this week's activity. Done in the seed and once in the database.
+- **Sign in as Owner or Coach (same day).** At Adam's request the login page asks for the role first, then checks the password set for that role, so both can share a password. Locally both are "12345" for now (in `.env`, not committed). Use real passwords before deploying.
 

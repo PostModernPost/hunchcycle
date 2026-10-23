@@ -39,15 +39,13 @@ export async function verifySession(token: string | undefined): Promise<Role | n
   return diff === 0 ? role : null;
 }
 
-/** Which role a typed password unlocks, if any. */
-export function roleForPassword(password: string): Role | null {
+/** True if the password matches the one set for the chosen role. */
+export function checkPassword(role: Role, password: string): boolean {
   const same = (a: string, b: string | undefined) => {
     if (!b || a.length !== b.length) return false;
     let diff = 0;
     for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
     return diff === 0;
   };
-  if (same(password, process.env.OWNER_PASSWORD)) return "owner";
-  if (same(password, process.env.COACH_PASSWORD)) return "coach";
-  return null;
+  return same(password, role === "owner" ? process.env.OWNER_PASSWORD : process.env.COACH_PASSWORD);
 }

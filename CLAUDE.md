@@ -16,7 +16,7 @@ Adam Waitt (founder of Play Action) is building this to replace the Google Doc a
 - Milestone 4 is built, waiting for Adam to check it (2026-10-22): assumption map (plain SVG, `src/components/assumptions/AssumptionMap.tsx`) with a list view; a page per assumption with editable fields, history, and every sprint that tested it (`src/app/assumptions/[id]`); new assumptions from a sprint's results (`assumptions.spawned_by_experiment_id`) that carry into "Start next sprint".
 - Milestone 4 signed off by Adam (2026-10-22).
 - Milestone 5 is built, waiting for Adam to check it (2026-10-22): password login with a signed cookie (`src/lib/session.ts`, `src/middleware.ts`, `src/app/login`); every editing server action starts with `ownerOnly()` (`src/lib/auth.ts`); coach screens are read-only through `useReadOnly`/`EditArea` (`src/components/Role.tsx`) and the shared inputs; comments on sprints and briefs (`src/components/Comments.tsx`); weekly brief built in `src/lib/brief.ts`, saved as snapshots (`src/app/briefs`); column moves are logged in `stage_changes` from 2026-10-22 on.
-- Next after Adam signs off: Milestone 6, deploy to Vercel, only when Adam says so. Before deploying, resolve the transaction pooler hang (see DECISIONS, milestone 2).
+- Next after Adam signs off: Milestone 6, deploy to Vercel, only when Adam says so. Before deploying: resolve the transaction pooler hang (see DECISIONS, milestone 2), and set real OWNER_PASSWORD and COACH_PASSWORD values (both are "12345" locally at Adam's request).
 - Stop after each milestone, summarize what was built, and wait for Adam to check it before starting the next.
 
 ## Open items to confirm with Adam
