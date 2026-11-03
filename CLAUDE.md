@@ -41,6 +41,7 @@ Adam Waitt (founder of Play Action) is building this to replace the Google Doc a
 ## Conventions
 
 - Stack: Next.js 15 App Router, TypeScript, Tailwind v4, Drizzle ORM with postgres-js. Prisma was dropped (see DECISIONS.md).
+- Every table in `public` has row level security on with no policies, so Supabase's public data API can't read or change anything (`drizzle/0005_enable_rls.sql`). The app connects as the owner, `postgres`, which RLS doesn't apply to. When adding a table, add `ALTER TABLE "name" ENABLE ROW LEVEL SECURITY;` to its migration.
 - Server components query the database directly through `src/db`. Pages that read data use `export const dynamic = "force-dynamic"`.
 - Keep the v1 scope cap in BRIEF section 11. If something outside it seems necessary for the core loop, ask Adam first.
 - User-facing copy: plain, direct words. No em dashes or en dashes anywhere in UI text or docs written for Adam; use commas, periods, or parentheses.

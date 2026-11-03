@@ -107,3 +107,7 @@ Choices made during the build that the brief didn't spell out.
 - **This replaces the BRIEF's "stale cards sort to the top" rule** on the board. Overdue sprints still get the red "past report date" flag, and the weekly brief still lists them.
 - **Drops go to whatever is under the pointer** (dnd-kit `pointerWithin`, falling back to overlap), for both row moves and column moves.
 
+## Security: Supabase data API locked (2026-11-03)
+
+- Supabase's Security Advisor flagged all 22 public tables as "RLS disabled in public": anyone with the project URL and anon key could read or edit them over Supabase's REST API. Migration 0005 turns on row level security for every table with no policies, which closes that route. The app is unaffected because it connects directly as `postgres`, the table owner. Checked: as the `anon` role, tables return 0 rows and updates touch nothing; as the app, everything reads and writes as before.
+
