@@ -119,3 +119,8 @@ Choices made during the build that the brief didn't spell out.
 - **`vercel.json`** runs it once a day at 15:17 UTC (Vercel's free plan allows daily crons and may run them any time within that hour).
 - **It only starts working after the Vercel deploy (milestone 6).** Until then, if the project pauses, unpause it from the Supabase dashboard (data is kept for 90 days).
 - **Not covered by this:** backups. The free plan has no downloadable daily backups; revisit Pro once the coach relies on the app.
+
+## Hosting plan (2026-11-09, Adam's decision)
+
+- **Stay on the free Vercel (Hobby) and free Supabase plans** while Adam tries the app out. Revisit paying (Vercel Pro for business use, Supabase Pro for backups and no pausing) once it's clear he uses it.
+- The setup works within the free limits: one daily cron (the keep-alive), and the database connection must not exceed the free Supabase pooler's limits, which the pooler fix before deploy has to account for.
