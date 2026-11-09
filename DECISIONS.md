@@ -124,3 +124,7 @@ Choices made during the build that the brief didn't spell out.
 
 - **Stay on the free Vercel (Hobby) and free Supabase plans** while Adam tries the app out. Revisit paying (Vercel Pro for business use, Supabase Pro for backups and no pausing) once it's clear he uses it.
 - The setup works within the free limits: one daily cron (the keep-alive), and the database connection must not exceed the free Supabase pooler's limits, which the pooler fix before deploy has to account for.
+
+## Domain (2026-11-09, Adam's decision)
+
+- **hunchcycle.com is the main address.** hunchcycle.app redirects to it. Both stay registered on Squarespace; only their DNS records change to point at Vercel.
