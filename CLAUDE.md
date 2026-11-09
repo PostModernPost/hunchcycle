@@ -35,7 +35,7 @@ Adam Waitt (founder of Play Action) is building this to replace the Google Doc a
 
 - GitHub: `PostModernPost/hunchcycle` (private), branch `main`.
 - Supabase: project ref `iumefduhzfimwiytqdcp` in the Hunchcycle org. Migrated and seeded 2026-10-22. The direct host (`db.<ref>.supabase.co`) is IPv6 only and doesn't work on Adam's network. Locally both `DATABASE_URL` and `DIRECT_URL` use the session pooler (`aws-0-us-east-1.pooler.supabase.com:5432`, user `postgres.<ref>`), because the transaction pooler (6543) hangs under concurrent queries from postgres-js (see DECISIONS.md). Must be resolved before the Vercel deploy.
-- Vercel: team "Adam Waitt's projects" (`team_Rg04dlv2tXWKdPDKgOFeU77S`). No project created yet. Deploy only when Adam says to (milestone 6). Env vars needed: `DATABASE_URL`, `DIRECT_URL`, `OWNER_PASSWORD`, `COACH_PASSWORD`, `SESSION_SECRET`.
+- Vercel: team "Adam Waitt's projects" (`team_Rg04dlv2tXWKdPDKgOFeU77S`). No project created yet. Deploy only when Adam says to (milestone 6). Env vars needed: `DATABASE_URL`, `DIRECT_URL`, `OWNER_PASSWORD`, `COACH_PASSWORD`, `SESSION_SECRET`, `CRON_SECRET`. A daily Vercel Cron (`vercel.json`) calls `/api/keepalive` so the free Supabase project doesn't pause; it does nothing until the app is deployed (see DECISIONS, keep-alive).
 - Domains: hunchcycle.com and hunchcycle.app, bought on Squarespace. DNS will need to point at Vercel at deploy time.
 
 ## Conventions

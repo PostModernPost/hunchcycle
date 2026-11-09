@@ -111,3 +111,11 @@ Choices made during the build that the brief didn't spell out.
 
 - Supabase's Security Advisor flagged all 22 public tables as "RLS disabled in public": anyone with the project URL and anon key could read or edit them over Supabase's REST API. Migration 0005 turns on row level security for every table with no policies, which closes that route. The app is unaffected because it connects directly as `postgres`, the table owner. Checked: as the `anon` role, tables return 0 rows and updates touch nothing; as the app, everything reads and writes as before.
 
+
+## Keep-alive for Supabase (2026-11-09, Adam's request)
+
+- **Supabase's free plan pauses a project after about 7 days without activity** (warning email received 2026-11-09). Adam chose a free daily ping over upgrading to Pro.
+- **`/api/keepalive`** reads one row from `experiments` and returns only `{ ok: true }`. It is outside the login (middleware matcher) and instead requires `Authorization: Bearer <CRON_SECRET>`, which Vercel Cron sends automatically once `CRON_SECRET` is set on the project. Without the secret it answers 401.
+- **`vercel.json`** runs it once a day at 15:17 UTC (Vercel's free plan allows daily crons and may run them any time within that hour).
+- **It only starts working after the Vercel deploy (milestone 6).** Until then, if the project pauses, unpause it from the Supabase dashboard (data is kept for 90 days).
+- **Not covered by this:** backups. The free plan has no downloadable daily backups; revisit Pro once the coach relies on the app.

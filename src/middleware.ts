@@ -1,4 +1,5 @@
-// Everything is behind the login (BRIEF section 8), except the login page itself.
+// Everything is behind the login (BRIEF section 8), except the login page itself
+// and the daily keep-alive, which checks its own secret (src/app/api/keepalive).
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySession } from "@/lib/session";
 
@@ -12,5 +13,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!login|_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!login|api/keepalive|_next/static|_next/image|favicon.ico).*)"],
 };
